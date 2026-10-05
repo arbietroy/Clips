@@ -1,0 +1,7 @@
+anthropic>=1.11
+faster-whisper>=1.1
+opencv-python-headless>=4.9,<5  # 5.x dropped the Haar face detector
+requests>=2.31
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9

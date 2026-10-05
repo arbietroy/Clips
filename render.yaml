@@ -1,0 +1,23 @@
+# One-click deploy of the API on Render (https://render.com): New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: clips-api
+    runtime: docker
+    rootDir: backend
+    plan: starter          # whisper needs ~1 GB RAM; the free plan is too small
+    healthCheckPath: /api/health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: ACCESS_CODE
+        sync: false
+      - key: WHISPER_MODEL
+        value: base
+      - key: CLIPS_DATA
+        value: /data
+    disk:
+      name: clips-data
+      mountPath: /data
+      sizeGB: 10

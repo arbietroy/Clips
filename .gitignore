@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+backend/data/
+backend/output/
+backend/music/**/*
+!backend/music/README.md
+backend/broll/**/*
+!backend/broll/README.md
+.vercel
