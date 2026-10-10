@@ -17,7 +17,16 @@ backend/    Python: transcription (Whisper), AI analysis (Claude), rendering (FF
 
 ## Run it on your computer
 
-You need **Node.js 18+**, **Python 3.10+** and **FFmpeg** (`brew install ffmpeg` on Mac, `sudo apt install ffmpeg` on Linux, or https://ffmpeg.org on Windows).
+You need **Node.js 18+**, **Python 3.12** and **FFmpeg**.
+
+**Quick start (Windows):** copy `backend\.env.example` to `backend\.env` and fill in your keys, then in PowerShell run:
+```powershell
+cd clips
+.\start.ps1
+```
+It installs everything on the first run, opens the backend and the website in their own windows, and opens your browser. Keep those two windows open while you use the app. (On Mac/Linux: `./start.sh`.)
+
+**Or start each part by hand:**
 
 **1. Backend (terminal 1)**
 ```bash

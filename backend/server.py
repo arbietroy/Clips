@@ -37,6 +37,23 @@ from clipforge.reframe import detect_rotation
 from clipforge.templates import TEMPLATES
 
 HERE = Path(__file__).resolve().parent
+
+
+def _load_env_file(path: Path) -> None:
+    """Read KEY=value lines from backend/.env (if present) without overriding real env vars."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip('"').strip("'")
+        if value and not os.environ.get(key.strip()):
+            os.environ[key.strip()] = value
+
+
+_load_env_file(HERE / ".env")
 DATA = Path(os.environ.get("CLIPS_DATA", HERE / "data")).resolve()
 VIDEOS = DATA / "videos"
 AUDIO = DATA / "audio"
