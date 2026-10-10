@@ -60,7 +60,7 @@ class Settings:
     broll_dir: Path = Path("broll")
     pexels_api_key: str | None = field(default_factory=lambda: os.environ.get("PEXELS_API_KEY"))
     pixabay_api_key: str | None = field(default_factory=lambda: os.environ.get("PIXABAY_API_KEY"))
-    max_broll_per_minute: float = 3.0
+    max_broll_per_minute: float = 4.0
 
     # --- music ---
     music: bool = True

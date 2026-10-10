@@ -7,7 +7,7 @@ import re
 import time
 from pathlib import Path
 
-from .analyze import Analysis, ClipIdea, analyze
+from .analyze import BROLL_VERSION, Analysis, ClipIdea, analyze, heuristic_broll
 from .assets import find_broll, find_music
 from .cleanup import find_removals, keep_segments
 from .config import Settings
@@ -21,7 +21,8 @@ from .transcript import LANGUAGE_NAMES, Transcript, transcribe
 
 # Bump when editing improves in a way that should be offered as an update for older renders.
 # 3: English by default, called-off takes cut, topic-aware b-roll.
-ENGINE_VERSION = 3
+# 4: stricter b-roll topics, saved plans get the new b-roll.
+ENGINE_VERSION = 4
 
 
 def slugify(text: str, max_len: int = 40) -> str:
@@ -118,9 +119,17 @@ class Project:
         if cached and (reuse or cached.extra.get("params") == params):
             self.log.info("Using cached analysis")
             a = cached
+            if a.source == "heuristic" and a.extra.get("broll_version") != BROLL_VERSION:
+                # Saved before the b-roll planner improved: keep the clips, redo b-roll and music mood.
+                self.log.info("Refreshing b-roll with the topic-aware planner")
+                a.broll, a.music_mood = heuristic_broll(self.transcript(), s)
+                a.broll = [b for b in a.broll if b.end <= self.transcript().duration + 1]
+                a.extra["broll_version"] = BROLL_VERSION
+                path.write_text(json.dumps(a.to_dict(), indent=2))
         else:
             a = analyze(self.transcript(), self.settings, self.log)
             a.extra["params"] = params
+            a.extra["broll_version"] = BROLL_VERSION
             path.write_text(json.dumps(a.to_dict(), indent=2))
         self.log.info(f"Analysis ({a.source}): {len(a.clips)} clips, {len(a.chapters)} chapters, "
                       f"{len(a.broll)} b-roll cues, music mood '{a.music_mood}'")

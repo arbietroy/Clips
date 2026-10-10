@@ -234,33 +234,54 @@ def analyze_heuristic(tr: Transcript, settings: Settings, log) -> Analysis:
         if s.start - chapters[-1]["start"] > 180 and s.start - prev.end > 0.9:
             chapters.append({"start": s.start, "title": _title_from(s.text)})
 
-    broll, emphasis = [], []
-    last_b, last_e = -999.0, -999.0
-    gap = 60.0 / max(settings.max_broll_per_minute, 0.1) * 1.5
-    topics = main_topics([w.text for w in tr.words])
-    recent: list[str] = []
+    emphasis = []
+    last_e = -999.0
+    broll, music_mood = heuristic_broll(tr, settings)
     for s in segs:
         words = tr.words_between(s.start, s.end)
-        if s.start - last_b >= gap:
-            # Only where a clear subject is named, preferring the video's main topics.
-            found = [(i, c) for i, c in concepts_in([w.text for w in words]) if c.query not in recent[-2:]]
-            if found:
-                found.sort(key=lambda x: (x[1].topic not in topics, x[0]))
-                i, c = found[0]
-                t0 = words[i].start
-                broll.append(BrollIdea(round(max(s.start, t0 - 0.2), 3), round(t0 + 3.2, 3), c.query))
-                recent.append(c.query)
-                last_b = t0
         for w in words:
             if (w.norm in HOOK_WORDS or w.text.endswith("!")) and w.start - last_e >= 8:
                 emphasis.append(w.start)
                 last_e = w.start
 
     return Analysis(
-        summary="", music_mood=TOPIC_MOODS.get(topics[0] if topics else "", "upbeat"), clips=clips,
+        summary="", music_mood=music_mood, clips=clips,
         chapters=chapters, broll=broll,
         emphasis=emphasis, remove=[], transition_style="fade", source="heuristic",
     )
+
+
+BROLL_VERSION = 2   # bump when heuristic b-roll changes, so saved plans get fresh b-roll
+
+
+def heuristic_broll(tr: Transcript, settings: Settings) -> tuple[list[BrollIdea], str]:
+    """B-roll moments and a music mood from the topic dictionary (no AI).
+
+    B-roll goes only where a clear subject is spoken, at that word, spaced out so the speaker stays
+    on screen most of the time; subjects from the video's main topics win when two are close together.
+    """
+    words = tr.words
+    topics = main_topics([w.text for w in words])
+    gap = max(8.0, 60.0 / max(settings.max_broll_per_minute, 0.1))
+    hits = concepts_in([w.text for w in words])
+    broll: list[BrollIdea] = []
+    recent: list[str] = []
+    last = -999.0
+    k = 0
+    while k < len(hits):
+        i, c = hits[k]
+        t0 = words[i].start
+        # Among mentions in the next few seconds, prefer the main topic.
+        window = [(j, cc) for j, cc in hits[k:] if words[j].start - t0 <= 3.0]
+        window.sort(key=lambda x: (x[1].topic not in topics, words[x[0]].start))
+        j, best = window[0]
+        t = words[j].start
+        if t - last >= gap and best.query not in recent[-2:]:
+            broll.append(BrollIdea(round(max(0.0, t - 0.2), 3), round(t + 3.2, 3), best.query))
+            recent.append(best.query)
+            last = t
+        k += len(window)
+    return broll, TOPIC_MOODS.get(topics[0] if topics else "", "upbeat")
 
 
 def _hook_from(text: str) -> str:

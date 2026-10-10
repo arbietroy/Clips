@@ -359,7 +359,7 @@ def _video_public(meta: dict) -> dict:
 @app.get("/api/videos/{video_id}")
 def get_video(video_id: str) -> dict:
     vdir = VIDEOS / _safe_id(video_id)
-    if not (vdir / "info.json").exists():
+    if not (vdir / "info.json").exists() or (vdir / DELETED_MARK).exists():
         raise HTTPException(404)
     meta = json.loads((vdir / "info.json").read_text())
     analysis = vdir / "project" / "analysis.json"
@@ -382,6 +382,8 @@ def video_thumb(video_id: str) -> FileResponse:
 # ---------------------------------------------------------------- projects (history)
 
 def _project_summary(vdir: Path) -> dict | None:
+    if (vdir / DELETED_MARK).exists():
+        return None
     try:
         meta = json.loads((vdir / "info.json").read_text())
     except (OSError, ValueError):
@@ -406,6 +408,7 @@ def _project_summary(vdir: Path) -> dict | None:
 
 @app.get("/api/projects")
 def list_projects() -> list[dict]:
+    _purge_deleted()
     items = [s for d in VIDEOS.iterdir() if d.is_dir() and (s := _project_summary(d))]
     return sorted(items, key=lambda p: -p["updated"])
 
@@ -429,15 +432,52 @@ def get_project(video_id: str) -> dict:
     return summary | {"clips": clips, "outputs": outputs, "language": _transcript_language(proj) or "en"}
 
 
+DELETED_MARK = ".deleted"
+
+
+def _remove_tree(path: Path, attempts: int = 5) -> bool:
+    """Delete a folder. On Windows a file that is still open (e.g. a video being streamed) can't be
+    removed straight away, so retry briefly and clear read-only flags."""
+    def clear_readonly(func, p, _exc):
+        try:
+            os.chmod(p, 0o700)
+            func(p)
+        except OSError:
+            pass
+
+    for i in range(attempts):
+        try:
+            shutil.rmtree(path, onerror=clear_readonly)
+        except OSError:
+            pass
+        if not path.exists():
+            return True
+        time.sleep(0.4 * (i + 1))
+    return False
+
+
+def _purge_deleted() -> None:
+    """Finish deleting projects whose files were still in use when they were deleted."""
+    for d in VIDEOS.iterdir():
+        if d.is_dir() and (d / DELETED_MARK).exists():
+            _remove_tree(d, attempts=1)
+
+
 @app.delete("/api/projects/{video_id}", dependencies=[Depends(check_access)])
 def delete_project(video_id: str) -> dict:
     vdir = VIDEOS / _safe_id(video_id)
-    if not vdir.exists():
-        raise HTTPException(404)
+    if not vdir.exists() or (vdir / DELETED_MARK).exists():
+        raise HTTPException(404, "Project not found")
     if any(j["request"].video_id == video_id and j["status"] in ("queued", "running") for j in jobs.values()):
-        raise HTTPException(409, "This project is still being processed")
-    shutil.rmtree(vdir)
-    return {"deleted": video_id}
+        raise HTTPException(409, "This project is still being processed. Try again when it has finished.")
+    if _remove_tree(vdir):
+        return {"deleted": video_id}
+    # Something still has a file open: hide the project now and finish deleting it later.
+    try:
+        (vdir / DELETED_MARK).write_text(str(time.time()))
+    except OSError as e:
+        raise HTTPException(500, f"Couldn't delete the project: {e}")
+    return {"deleted": video_id, "pending": True}
 
 
 @app.get("/api/videos/{video_id}/source")
@@ -487,3 +527,7 @@ def media(video_id: str, filename: str) -> FileResponse:
     if path.parent != base or not path.is_file() or path.suffix not in (".mp4", ".srt", ".json"):
         raise HTTPException(404)
     return FileResponse(path, filename=None if path.suffix == ".mp4" else filename)
+
+
+# Finish any deletions that were waiting on files in use (e.g. from before a restart).
+threading.Thread(target=_purge_deleted, daemon=True).start()

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiUrl, getProjects, ProjectSummary } from "../lib/api";
+import { apiUrl, deleteProject, getProjects, ProjectSummary } from "../lib/api";
 import { fmtTime } from "../lib/hooks";
 
 function ago(ts: number) {
@@ -19,6 +19,19 @@ export default function Projects() {
   useEffect(() => {
     getProjects().then(setItems).catch((e) => setError(e.message));
   }, []);
+
+  const remove = async (e: React.MouseEvent, p: ProjectSummary) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Delete “${p.name}” and everything made from it? This can't be undone.`)) return;
+    try {
+      await deleteProject(p.id);
+      localStorage.removeItem(`clips.draft.${p.id}`);
+      setItems((list) => (list ?? []).filter((x) => x.id !== p.id));
+    } catch (err: any) {
+      setError(`Couldn't delete “${p.name}”: ${err.message}`);
+    }
+  };
 
   return (
     <div className="page">
@@ -45,6 +58,11 @@ export default function Projects() {
                 {p.thumb && <img src={apiUrl(p.thumb)} alt="" loading="lazy" />}
                 <span className="duration">{fmtTime(p.duration)}</span>
                 {p.active_jobs.length > 0 && <span className="working">Working…</span>}
+                {p.active_jobs.length === 0 && (
+                  <button className="card-delete" title="Delete project" onClick={(e) => remove(e, p)}>
+                    Delete
+                  </button>
+                )}
               </div>
               <div className="card-body">
                 <h3>{p.name}</h3>

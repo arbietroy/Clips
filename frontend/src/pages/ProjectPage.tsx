@@ -150,6 +150,12 @@ export default function ProjectPage() {
 
   const remove = async () => {
     if (!project || !confirm(`Delete “${project.name}” and everything made from it? This can't be undone.`)) return;
+    // Stop every player on the page first: Windows can't delete a video file that is still being streamed.
+    document.querySelectorAll("video").forEach((v) => {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+    });
     try {
       await deleteProject(id);
       localStorage.removeItem(draftKey(id));
