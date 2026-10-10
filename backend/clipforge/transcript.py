@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -73,6 +74,24 @@ def segments_from_words(words: list[Word], max_gap: float = 0.8) -> list[Segment
     return segs
 
 
+def load_audio(path: Path, sample_rate: int = 16000):
+    """Decode any media file to mono float32 PCM with FFmpeg.
+
+    faster-whisper can decode audio itself through PyAV, but PyAV 19 removed an option it passes
+    (``metadata_errors``), so we hand it ready-made samples instead.
+    """
+    import numpy as np
+
+    proc = subprocess.run(
+        ["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", str(sample_rate),
+         "-f", "s16le", "-"],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"Could not read the audio: {proc.stderr.decode(errors='replace').strip()[-500:]}")
+    return np.frombuffer(proc.stdout, np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(video: Path, model_size: str = "small", language: str | None = None, log=None) -> Transcript:
     try:
         from faster_whisper import WhisperModel
@@ -82,8 +101,11 @@ def transcribe(video: Path, model_size: str = "small", language: str | None = No
     if log:
         log.info(f"Loading Whisper model '{model_size}' (first run downloads it)…")
     model = WhisperModel(model_size, device="auto", compute_type="default")
+    if log:
+        log.info("Reading the audio…")
+    audio = load_audio(video)
     seg_iter, info = model.transcribe(
-        str(video),
+        audio,
         language=language,
         word_timestamps=True,
         initial_prompt=FILLER_PROMPT,
