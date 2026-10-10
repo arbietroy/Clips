@@ -34,6 +34,8 @@ class Settings:
     # --- cleanup ---
     remove_fillers: bool = True
     remove_repetition: bool = True
+    remove_retakes: bool = True              # false starts / repeated lines (see cleanup.find_retakes)
+    clean_raw_clips: bool = False            # Clip Finder exports: also cut silences, ums and retakes
     aggressive_fillers: bool = False         # also cut "you know", "I mean", "like,"
     max_pause: float = 0.45                  # silences longer than this are tightened
     pause_padding: float = 0.12              # breathing room kept around each phrase

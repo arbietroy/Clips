@@ -221,3 +221,25 @@ input[type="color"] { padding: 2px; width: 44px; height: 36px; }
 .mini { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 3px 7px; font: inherit; font-size: 12px; cursor: pointer; }
 .mini:hover { border-color: var(--accent); }
 .export-sticky { position: sticky; bottom: 16px; z-index: 5; margin-top: 22px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 14px 18px; background: rgba(20, 22, 28, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+
+/* projects */
+.back { display: inline-block; color: var(--muted); text-decoration: none; font-size: 14px; margin-bottom: 14px; }
+.back:hover { color: var(--accent); }
+.page.narrow-wide { max-width: 880px; }
+.project-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+.project-head h1 { word-break: break-word; }
+.project-head .lead { margin-bottom: 0; }
+.btn.danger { color: var(--err); }
+.section-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 40px 0 16px; }
+.section-row .section-title { margin: 0; }
+.small-seg { margin: 0; width: auto; }
+.small-seg button { padding: 6px 14px; flex: none; }
+.projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.project-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; text-decoration: none; transition: border-color 0.15s, transform 0.15s; }
+.project-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.project-thumb { position: relative; aspect-ratio: 16 / 10; background: #000; display: grid; place-items: center; overflow: hidden; }
+.project-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.project-thumb .duration { position: absolute; right: 8px; bottom: 8px; background: rgba(0, 0, 0, 0.7); font-size: 12px; padding: 2px 7px; border-radius: 6px; }
+.project-thumb .working { position: absolute; left: 8px; top: 8px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.empty { text-align: center; padding: 40px 20px; }
+.export-sticky .toggle { align-items: center; }

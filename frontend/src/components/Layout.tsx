@@ -14,6 +14,7 @@ export default function Layout() {
           <span className="logo-mark">▶</span> Clips
         </Link>
         <nav>
+          <NavLink to="/projects">My Projects</NavLink>
           <NavLink to="/find">Clip Finder</NavLink>
           <NavLink to="/auto">Auto Editor</NavLink>
           <NavLink to="/editor">

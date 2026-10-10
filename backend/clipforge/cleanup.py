@@ -14,7 +14,7 @@ AGGRESSIVE_WORDS = {"like", "basically", "literally", "actually"}
 
 
 def find_removals(words: list[Word], fillers: bool = True, repetition: bool = True,
-                  aggressive: bool = False) -> set[int]:
+                  aggressive: bool = False, retakes: bool = True) -> set[int]:
     """Return indices of words to drop."""
     drop: set[int] = set()
     norms = [w.norm for w in words]
@@ -40,7 +40,9 @@ def find_removals(words: list[Word], fillers: bool = True, repetition: bool = Tr
             while j + 2 * n <= len(kept):
                 a = [norms[k] for k in kept[j:j + n]]
                 b = [norms[k] for k in kept[j + n:j + 2 * n]]
-                if a == b and all(a) and not (n == 1 and a[0] in {"no", "very", "really", "so", "bye", "ha"}):
+                # A repeat after a full stop is deliberate ("Never give up. Never give up."): keep it.
+                emphatic = n > 1 and words[kept[j + n - 1]].text.rstrip().endswith((".", "!", "?"))
+                if a == b and all(a) and not emphatic and not (n == 1 and a[0] in {"no", "very", "really", "so", "bye", "ha"}):
                     drop.update(kept[j:j + n])
                     kept = kept[:j] + kept[j + n:]
                     continue
@@ -49,6 +51,62 @@ def find_removals(words: list[Word], fillers: bool = True, repetition: bool = Tr
         for i, w in enumerate(words):
             if w.text.endswith(("-", "—")) and i not in drop:
                 drop.add(i)
+    if retakes:
+        drop |= find_retakes(words, drop)
+    return drop
+
+
+ABANDON_MARKS = ("...", "…", "-", "—")
+
+
+def find_retakes(words: list[Word], already: set[int] | None = None, max_gap_s: float = 15.0,
+                 max_take_words: int = 30) -> set[int]:
+    """Find false starts and retakes: the speaker begins a sentence, then starts it again.
+
+        "So today I want to... so today I want to talk about money"  ->  cut the first attempt
+        "Let me explain this. Let me explain this."                  ->  cut the first sentence
+
+    Works on the transcript alone (no AI). A first attempt is only cut when it is repeated almost
+    word for word within a few seconds and it wasn't a finished clause, so deliberate repetition
+    ("we will fight on the beaches, we will fight on the seas") is kept.
+    """
+    already = already or set()
+    kept = [i for i in range(len(words)) if i not in already]
+    norms = [words[i].norm for i in kept]
+    drop: set[int] = set()
+    a = 0
+    def phrase_start(pos: int) -> bool:
+        if pos == 0 or kept[pos - 1] != kept[pos] - 1:      # first word, or right after a cut
+            return True
+        prev, cur = words[kept[pos - 1]], words[kept[pos]]
+        return prev.text.rstrip().endswith((".", ",", "!", "?", ";", ":") + ABANDON_MARKS) or cur.start - prev.end > 0.25
+
+    while a < len(kept):
+        cut_to = None
+        if not phrase_start(a):
+            a += 1
+            continue
+        for b in range(a + 2, min(a + max_take_words + 1, len(kept))):
+            if words[kept[b]].start - words[kept[a]].start > max_gap_s:
+                break
+            k = 0
+            while b + k < len(kept) and a + k < b and norms[a + k] and norms[a + k] == norms[b + k]:
+                k += 1
+            take = b - a                      # words in the first attempt
+            if k < 3:
+                continue
+            last = words[kept[b - 1]].text.strip()
+            finished = last.endswith((".", ",", "!", "?", ";", ":")) and not last.endswith(ABANDON_MARKS)
+            whole_repeat = k == take and k >= 4      # the whole first attempt is said again
+            restart = k >= 3 and take - k <= 2 and not finished
+            if whole_repeat or restart:
+                cut_to = b
+                break
+        if cut_to is not None:
+            drop.update(kept[a:cut_to])
+            a = cut_to
+        else:
+            a += 1
     return drop
 
 

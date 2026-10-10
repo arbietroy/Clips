@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import ExportDialog from "../components/ExportDialog";
 import { FormatValue } from "../components/FormatPicker";
 import JobProgress from "../components/JobProgress";
@@ -41,6 +41,7 @@ export default function AutoEditor() {
   const [zoom, setZoom] = useState(true);
   const [fillers, setFillers] = useState(true);
   const [aggressive, setAggressive] = useState(false);
+  const [retakes, setRetakes] = useState(true);
 
   // export
   const [format, setFormat] = useState<FormatValue>({
@@ -106,6 +107,7 @@ export default function AutoEditor() {
     zoom,
     fillers,
     aggressive,
+    retakes,
   });
 
   const run = async (f: FormatValue) => {
@@ -142,6 +144,11 @@ export default function AutoEditor() {
 
   return (
     <div className="page">
+      {video && (
+        <Link to={`/projects/${video.id}`} className="back">
+          ← Back to project (all clips &amp; exports)
+        </Link>
+      )}
       <h1>Auto Editor</h1>
       <p className="lead">
         Edit a whole video or one clip automatically. Ums and repeats are cut, and captions, b-roll, music, transitions
@@ -234,7 +241,8 @@ export default function AutoEditor() {
             <section className="panel">
               <h2>Editing</h2>
               <div className="toggles">
-                <Toggle label="Cut ums, uhs & repeats" hint="Also tightens long pauses" checked={fillers} onChange={setFillers} />
+                <Toggle label="Cut ums, uhs & stutters" hint="Also tightens long pauses" checked={fillers} onChange={setFillers} />
+                <Toggle label="Cut retakes & repeated lines" hint="When a sentence is started again, keep only the last try" checked={retakes} onChange={setRetakes} />
                 {fillers && <Toggle label="Also cut “you know”, “I mean”, “like,”" checked={aggressive} onChange={setAggressive} />}
                 <Toggle label="B-roll" hint="Stock footage over matching moments" checked={broll} onChange={setBroll} />
                 <Toggle label="Transitions" hint="With a whoosh sound effect" checked={transitions} onChange={setTransitions} />
@@ -291,7 +299,10 @@ export default function AutoEditor() {
 
       {results.length > 0 && (
         <section>
-          <h2 className="section-title">Your edits</h2>
+          <div className="section-row">
+            <h2 className="section-title">Your edits</h2>
+            {video && <Link to={`/projects/${video.id}`} className="link">See everything for this video →</Link>}
+          </div>
           <div className="cards">
             {results.map((o) => (
               <OutputCard

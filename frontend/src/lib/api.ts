@@ -68,6 +68,7 @@ export interface VideoInfo {
   width: number;
   height: number;
   url: string;
+  thumb?: string;
   rotation?: number; // clockwise turn the server detected to make people upright
   clips?: ClipIdea[];
 }
@@ -103,7 +104,23 @@ export interface Output {
   cuts?: number;
   format?: string;
   template?: string;
+  cleaned?: boolean;
+  created?: number;
   error?: string;
+}
+
+export interface ProjectSummary extends VideoInfo {
+  created: number;
+  clips_found: number;
+  exports: number;
+  edits: number;
+  updated: number;
+  active_jobs: string[];
+}
+
+export interface Project extends ProjectSummary {
+  clips: ClipIdea[];
+  outputs: Output[];
 }
 
 export interface JobOptions {
@@ -124,6 +141,8 @@ export interface JobOptions {
   transitions?: boolean;
   zoom?: boolean;
   fillers?: boolean;
+  retakes?: boolean;
+  clean?: boolean;
   aggressive?: boolean;
   reframe?: string;
   rotate?: string;
@@ -150,6 +169,9 @@ export interface Job {
 export const getHealth = () => request<Health>("/api/health");
 export const getVideo = (id: string) => request<VideoInfo>(`/api/videos/${id}`);
 export const getJob = (id: string) => request<Job>(`/api/jobs/${id}`);
+export const getProjects = () => request<ProjectSummary[]>("/api/projects");
+export const getProject = (id: string) => request<Project>(`/api/projects/${id}`);
+export const deleteProject = (id: string) => request<{ deleted: string }>(`/api/projects/${id}`, { method: "DELETE" });
 
 export const createJob = (body: {
   type: Job["type"];

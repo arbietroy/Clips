@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 from .analyze import Analysis, ClipIdea, analyze
@@ -82,7 +83,9 @@ class Project:
         self._transcript = tr
         return tr
 
-    def analysis(self, refresh: bool = False) -> Analysis:
+    def analysis(self, refresh: bool = False, reuse: bool = False) -> Analysis:
+        """The edit plan from the transcript. ``reuse`` keeps any saved analysis even if it was made with
+        different clip settings (exporting or auto-editing must not replace the suggested clips)."""
         if self._analysis and not refresh:
             return self._analysis
         path = self.dir / "analysis.json"
@@ -91,7 +94,7 @@ class Project:
                   "target": s.clip_target_seconds, "ai": s.use_claude}
         cached = Analysis.from_dict(json.loads(path.read_text())) if path.exists() and not refresh else None
         # Re-run when the clip count or length changed; a heuristic result is also redone once AI is available.
-        if cached and cached.extra.get("params") == params:
+        if cached and (reuse or cached.extra.get("params") == params):
             self.log.info("Using cached analysis")
             a = cached
         else:
@@ -107,8 +110,8 @@ class Project:
         if self._drop is None:
             s = self.settings
             self._drop = find_removals(self.transcript().words, s.remove_fillers, s.remove_repetition,
-                                       s.aggressive_fillers)
-            self.log.info(f"Found {len(self._drop)} filler / repeated words to cut")
+                                       s.aggressive_fillers, s.remove_retakes)
+            self.log.info(f"Found {len(self._drop)} filler, repeated and retake words to cut")
         return self._drop
 
     def _segments(self, start: float, end: float) -> list[list[float]]:
@@ -160,6 +163,10 @@ class Project:
                                                  "format": s.format, "template": s.caption_template},
         )
 
+    def _size_tag(self) -> str:
+        s = self.settings
+        return f"{s.custom_size[0]}x{s.custom_size[1]}" if s.custom_size else (s.format or "original")
+
     def _orientation(self, plan: EditPlan) -> str:
         return "portrait" if plan.height > plan.width else "landscape"
 
@@ -176,7 +183,10 @@ class Project:
 
     def plan_raw(self, clip: ClipIdea, index: int) -> EditPlan:
         """A clip exactly as said in the source, just cut and resized (the clip finder's output)."""
-        plan = self._base(f"clip_{index:02d}_{slugify(clip.title)}", "raw", [[clip.start, clip.end]])
+        segs = self._segments(clip.start, clip.end) if self.settings.clean_raw_clips else [[clip.start, clip.end]]
+        name = f"clip_{index:02d}_{slugify(clip.title, 30)}_{int(clip.start)}-{int(clip.end)}_{self._size_tag()}"
+        plan = self._base(name, "raw", segs)
+        plan.meta["cleaned"] = self.settings.clean_raw_clips
         plan.captions = False
         plan.zoom_on_jump_cuts = False
         plan.transition_sfx = False
@@ -238,14 +248,17 @@ class Project:
                 results.append({"name": plan.name, "error": str(e)})
                 continue
             info = probe(out)
-            results.append({
+            result = {
                 "name": plan.name, "kind": plan.kind, "file": str(out), "srt": str(self.dir / f"{plan.name}.srt"),
                 "plan": str(plan_path), "duration": round(info.duration, 2), "width": plan.width,
                 "height": plan.height, **{k: v for k, v in plan.meta.items() if k != "transcript"},
                 "hook_text": plan.hook_text or plan.meta.get("hook_text"),
                 "music": plan.music and Path(plan.music["file"]).name,
                 "broll": [b["query"] for b in plan.broll], "cuts": len(plan.segments) - 1,
-            })
+                "created": time.time(),
+            }
+            (self.dir / f"{plan.name}.result.json").write_text(json.dumps(result, indent=2))
+            results.append(result)
         return results
 
     def find_clips(self, clips: list[ClipIdea] | None = None) -> list[dict]:
@@ -269,9 +282,10 @@ class Project:
         """Automatic editor: a time range (e.g. a clip from the finder) or the whole video."""
         dur = self.transcript().duration
         if start is None or end is None:
-            return self.render_plans([self.plan_edit(0.0, dur, "full_edit")])
+            return self.render_plans([self.plan_edit(0.0, dur, f"full_edit_{self._size_tag()}_{self.settings.caption_template}")])
         clip = self.clip_for_range(start, end)
-        name = f"edit_{slugify(clip.title) if clip else 'clip'}_{int(start)}-{int(end)}"
+        name = (f"edit_{slugify(clip.title, 30) if clip else 'clip'}_{int(start)}-{int(end)}"
+                f"_{self._size_tag()}_{self.settings.caption_template}")
         return self.render_plans([self.plan_edit(max(0.0, start), min(end, dur), name, clip)])
 
     def run(self, shorts: bool = True, long: bool = True, only_clip: int | None = None) -> list[dict]:
@@ -286,6 +300,36 @@ class Project:
         results = self.render_plans(plans)
         (self.dir / "manifest.json").write_text(json.dumps(results, indent=2))
         return results
+
+
+def list_outputs(project_dir: Path) -> list[dict]:
+    """Every video rendered for a project, newest first (read from the saved .result.json files)."""
+    out = []
+    for f in Path(project_dir).glob("*.result.json"):
+        try:
+            r = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if Path(r.get("file", "")).exists():
+            out.append(r)
+    # Renders from before results were saved: rebuild what we can from the plan.
+    known = {r["name"] for r in out}
+    for plan_file in Path(project_dir).glob("*.plan.json"):
+        name = plan_file.name[: -len(".plan.json")]
+        video = Path(project_dir) / f"{name}.mp4"
+        if name in known or not video.exists():
+            continue
+        try:
+            plan = json.loads(plan_file.read_text())
+        except (OSError, ValueError):
+            continue
+        meta = {k: v for k, v in plan.get("meta", {}).items() if k != "transcript"}
+        out.append({"name": name, "kind": plan.get("kind"), "file": str(video),
+                    "srt": str(Path(project_dir) / f"{name}.srt"), "plan": str(plan_file),
+                    "width": plan.get("width"), "height": plan.get("height"),
+                    "duration": round(probe(video).duration, 2), "hook_text": plan.get("hook_text") or meta.get("hook_text"),
+                    "cuts": len(plan.get("segments", [])) - 1, "created": video.stat().st_mtime, **meta})
+    return sorted(out, key=lambda r: -r.get("created", 0))
 
 
 def _split_for_transition(segs: list[list[float]], t: float, window: float = 4.0) -> int | None:
