@@ -107,7 +107,8 @@ class Project:
             if len(out) >= max_n or b.start - last_end < 6:
                 continue
             f = find_broll(b.query, s.broll_dir, self.dir.parent / "_broll_cache", orientation,
-                           s.pexels_api_key, b.end - b.start, self._used_broll, self.log)
+                           b.end - b.start, self._used_broll, self.log,
+                           pexels_key=s.pexels_api_key, pixabay_key=s.pixabay_api_key)
             if f:
                 self._used_broll.add(str(f))
                 out.append({"start": b.start, "end": b.end, "query": b.query, "file": str(Path(f).resolve())})

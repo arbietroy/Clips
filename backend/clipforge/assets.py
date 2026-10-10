@@ -53,9 +53,9 @@ def find_music(mood: str, music_dir: Path, key: str = "") -> Path | None:
     return _stable_pick(pool, mood + key)
 
 
-def find_broll(query: str, broll_dir: Path, cache_dir: Path, orientation: str, api_key: str | None,
-               min_seconds: float, used: set[str], log) -> Path | None:
-    """Local library first (file names matched against the query), then Pexels stock video."""
+def find_broll(query: str, broll_dir: Path, cache_dir: Path, orientation: str, min_seconds: float,
+               used: set[str], log, pexels_key: str | None = None, pixabay_key: str | None = None) -> Path | None:
+    """Local library first (file names matched against the query), then Pexels, then Pixabay stock video."""
     q = _tokens(query)
     if broll_dir.exists():
         local = [p for p in broll_dir.rglob("*") if p.suffix.lower() in VIDEO_EXT]
@@ -63,16 +63,39 @@ def find_broll(query: str, broll_dir: Path, cache_dir: Path, orientation: str, a
         for score, p in scored:
             if score and str(p) not in used:
                 return p
-    if api_key:
+    for name, key, search in (("Pexels", pexels_key, _pexels), ("Pixabay", pixabay_key, _pixabay)):
+        if not key:
+            continue
         try:
-            return _pexels(query, cache_dir, orientation, api_key, min_seconds, used)
+            found = search(query, orientation, key, min_seconds)
         except Exception as e:
-            log.warn(f"Pexels search for '{query}' failed: {e}")
+            log.warn(f"{name} search for '{query}' failed: {e}")
+            continue
+        for video_id, url, width in found:
+            dest = cache_dir / f"{name.lower()}_{video_id}_{width}.mp4"
+            if str(dest) not in used:
+                _download(url, dest)
+                return dest
     return None
 
 
-def _pexels(query: str, cache_dir: Path, orientation: str, api_key: str, min_seconds: float,
-            used: set[str]) -> Path | None:
+def _download(url: str, dest: Path) -> None:
+    import requests
+
+    if dest.exists():
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=60) as resp:
+        resp.raise_for_status()
+        tmp = dest.with_suffix(".part")
+        with open(tmp, "wb") as fh:
+            for chunk in resp.iter_content(1 << 16):
+                fh.write(chunk)
+        tmp.replace(dest)
+
+
+def _pexels(query: str, orientation: str, api_key: str, min_seconds: float) -> list[tuple[str, str, int]]:
+    """Candidate (id, mp4 url, width) from Pexels, best first."""
     import requests
 
     r = requests.get(
@@ -82,24 +105,39 @@ def _pexels(query: str, cache_dir: Path, orientation: str, api_key: str, min_sec
     )
     r.raise_for_status()
     target_w = 1080 if orientation == "portrait" else 1920
+    out = []
     for video in r.json().get("videos", []):
         if video.get("duration", 0) < min_seconds:
             continue
         files = [f for f in video.get("video_files", []) if f.get("file_type") == "video/mp4" and f.get("width")]
-        if not files:
+        if files:
+            f = min(files, key=lambda f: abs(f["width"] - target_w) + (5000 if f["width"] < 640 else 0))
+            out.append((str(video["id"]), f["link"], f["width"]))
+    return out
+
+
+def _pixabay(query: str, orientation: str, api_key: str, min_seconds: float) -> list[tuple[str, str, int]]:
+    """Candidate (id, mp4 url, width) from Pixabay, best first. Pixabay has no orientation filter,
+    so clips matching the wanted orientation are preferred and the rest are cropped when rendering."""
+    import requests
+
+    r = requests.get(
+        "https://pixabay.com/api/videos/",
+        params={"key": api_key, "q": query[:100], "per_page": 20, "safesearch": "true"},
+        timeout=20,
+    )
+    r.raise_for_status()
+    target_w = 1080 if orientation == "portrait" else 1920
+    ranked = []
+    for hit in r.json().get("hits", []):
+        if hit.get("duration", 0) < min_seconds:
             continue
-        f = min(files, key=lambda f: abs(f["width"] - target_w) + (5000 if f["width"] < 640 else 0))
-        dest = cache_dir / f"pexels_{video['id']}_{f['width']}.mp4"
-        if str(dest) in used:
+        sizes = [v for v in (hit.get("videos") or {}).values() if v.get("url") and v.get("width")]
+        if not sizes:
             continue
-        if not dest.exists():
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            with requests.get(f["link"], stream=True, timeout=60) as resp:
-                resp.raise_for_status()
-                tmp = dest.with_suffix(".part")
-                with open(tmp, "wb") as fh:
-                    for chunk in resp.iter_content(1 << 16):
-                        fh.write(chunk)
-                tmp.rename(dest)
-        return dest
-    return None
+        v = min(sizes, key=lambda v: abs(v["width"] - target_w) + (5000 if v["width"] < 640 else 0))
+        portrait = v["height"] > v["width"]
+        mismatch = portrait != (orientation == "portrait")
+        ranked.append((mismatch, str(hit["id"]), v["url"], v["width"]))
+    ranked.sort(key=lambda x: x[0])   # stable: keeps Pixabay's relevance order within each group
+    return [(i, u, w) for _, i, u, w in ranked]

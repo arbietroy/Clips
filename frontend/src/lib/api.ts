@@ -55,6 +55,8 @@ export interface Health {
   ok: boolean;
   claude: boolean;
   pexels: boolean;
+  pixabay: boolean;
+  broll: boolean;
   music_tracks: number;
   access_code: boolean;
 }

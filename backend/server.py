@@ -4,7 +4,8 @@
 
 Environment:
     ANTHROPIC_API_KEY   AI clip finding and edit planning
-    PEXELS_API_KEY      automatic stock b-roll
+    PEXELS_API_KEY      automatic stock b-roll from Pexels
+    PIXABAY_API_KEY     automatic stock b-roll from Pixabay
     ACCESS_CODE         optional: require this code from the web app (protects your API credits)
     CORS_ORIGINS        comma-separated allowed origins (default: *)
     CLIPS_DATA          where uploads and renders are stored (default: ./data)
@@ -205,6 +206,8 @@ def health() -> dict:
         "ok": True,
         "claude": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
         "pexels": bool(os.environ.get("PEXELS_API_KEY")),
+        "pixabay": bool(os.environ.get("PIXABAY_API_KEY")),
+        "broll": bool(os.environ.get("PEXELS_API_KEY") or os.environ.get("PIXABAY_API_KEY")),
         "music_tracks": sum(1 for p in music.rglob("*") if p.suffix.lower() in AUDIO_EXT) if music.exists() else 0,
         "access_code": bool(ACCESS_CODE),
         "formats": FORMATS,

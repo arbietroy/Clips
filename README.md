@@ -25,7 +25,8 @@ python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...  # AI clip picking — https://console.anthropic.com
-export PEXELS_API_KEY=...            # optional: free stock b-roll — https://www.pexels.com/api/
+export PIXABAY_API_KEY=...           # optional: free stock b-roll — https://pixabay.com/api/docs/
+# (or PEXELS_API_KEY — https://www.pexels.com/api/ — either works; both are tried if set)
 uvicorn server:app --reload --port 8000
 ```
 
@@ -52,7 +53,7 @@ Even without the backend, the link works for showing the app: every page loads, 
 
 **Backend on Render (about $7/month)**
 1. In Render, choose **New → Blueprint** and pick this repo. It reads `render.yaml`.
-2. Fill in `ANTHROPIC_API_KEY`, and optionally `PEXELS_API_KEY` and `ACCESS_CODE`.
+2. Fill in `ANTHROPIC_API_KEY`, and optionally `PIXABAY_API_KEY` (or `PEXELS_API_KEY`) and `ACCESS_CODE`.
 3. Copy the service URL into Vercel's `VITE_API_URL` and redeploy the frontend.
 
 **Set an `ACCESS_CODE` before sharing.** Without one, anyone who finds the link can run videos through your Claude API key. Give the code to your manager. The site asks for it under **AI server** (top right).

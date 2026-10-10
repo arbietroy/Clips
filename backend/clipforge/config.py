@@ -56,6 +56,7 @@ class Settings:
     broll: bool = True
     broll_dir: Path = Path("broll")
     pexels_api_key: str | None = field(default_factory=lambda: os.environ.get("PEXELS_API_KEY"))
+    pixabay_api_key: str | None = field(default_factory=lambda: os.environ.get("PIXABAY_API_KEY"))
     max_broll_per_minute: float = 3.0
 
     # --- music ---
@@ -75,4 +76,5 @@ class Settings:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["pexels_api_key"] = bool(self.pexels_api_key)
+        d["pixabay_api_key"] = bool(self.pixabay_api_key)
         return {k: (str(v) if isinstance(v, Path) else v) for k, v in d.items()}

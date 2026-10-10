@@ -12,7 +12,7 @@ export default function ServerDialog({ onClose }: { onClose: () => void }) {
     setResult("Testing…");
     try {
       const h = await getHealth();
-      setResult(`Connected. Claude: ${h.claude ? "yes" : "no"} · Pexels b-roll: ${h.pexels ? "yes" : "no"} · music tracks: ${h.music_tracks}`);
+      setResult(`Connected. Claude: ${h.claude ? "yes" : "no"} · stock b-roll: ${h.pexels ? "Pexels" : h.pixabay ? "Pixabay" : "no"} · music tracks: ${h.music_tracks}`);
     } catch (e: any) {
       setResult(`Could not connect: ${e.message}`);
     }
