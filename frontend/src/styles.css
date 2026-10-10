@@ -200,3 +200,24 @@ input[type="color"] { padding: 2px; width: 44px; height: 36px; }
   .templates { grid-template-columns: repeat(2, 1fr); }
   .formats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* clip previews (Clip Finder) */
+.card.preview { transition: border-color 0.15s, opacity 0.15s; }
+.card.preview:not(.chosen) { opacity: 0.6; }
+.card.preview.chosen { border-color: #4a4320; }
+.preview-frame { position: relative; overflow: hidden; background: #000; cursor: pointer; max-height: 540px; }
+.preview-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.rank { position: absolute; top: 10px; right: 10px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 3px 8px; }
+.play-big { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 20px; padding-left: 4px; pointer-events: none; }
+.scrub { height: 6px; background: #22252e; cursor: pointer; }
+.scrub > div { height: 100%; background: var(--accent); }
+.pick { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.pick input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.quote { color: #c9cdd8; border-left: 2px solid var(--line); padding-left: 10px; cursor: pointer; }
+.trim { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 4px; }
+.trim-group { display: inline-flex; align-items: center; gap: 6px; }
+.trim-group .muted { min-width: 32px; }
+.trim b { font-size: 13px; min-width: 34px; text-align: center; }
+.mini { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 3px 7px; font: inherit; font-size: 12px; cursor: pointer; }
+.mini:hover { border-color: var(--accent); }
+.export-sticky { position: sticky; bottom: 16px; z-index: 5; margin-top: 22px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 14px 18px; background: rgba(20, 22, 28, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }

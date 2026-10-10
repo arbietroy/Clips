@@ -80,6 +80,7 @@ export interface ClipIdea {
   virality_score: number;
   reason: string;
   music_mood: string;
+  text?: string; // what is said in the clip
 }
 
 export interface Output {
@@ -131,7 +132,7 @@ export interface JobOptions {
 
 export interface Job {
   id: string;
-  type: "find_clips" | "auto_edit";
+  type: "analyze" | "find_clips" | "auto_edit";
   video_id: string;
   status: "queued" | "running" | "done" | "error";
   phase: "transcribing" | "analyzing" | "rendering" | null;
@@ -154,6 +155,7 @@ export const createJob = (body: {
   type: Job["type"];
   video_id: string;
   range?: [number, number] | null;
+  clips?: ClipIdea[];
   options: JobOptions;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 

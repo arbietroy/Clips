@@ -86,11 +86,17 @@ class Project:
         if self._analysis and not refresh:
             return self._analysis
         path = self.dir / "analysis.json"
-        if path.exists() and not refresh:
+        s = self.settings
+        params = {"num_clips": s.num_clips, "min": s.clip_min_seconds, "max": s.clip_max_seconds,
+                  "target": s.clip_target_seconds, "ai": s.use_claude}
+        cached = Analysis.from_dict(json.loads(path.read_text())) if path.exists() and not refresh else None
+        # Re-run when the clip count or length changed; a heuristic result is also redone once AI is available.
+        if cached and cached.extra.get("params") == params:
             self.log.info("Using cached analysis")
-            a = Analysis.from_dict(json.loads(path.read_text()))
+            a = cached
         else:
             a = analyze(self.transcript(), self.settings, self.log)
+            a.extra["params"] = params
             path.write_text(json.dumps(a.to_dict(), indent=2))
         self.log.info(f"Analysis ({a.source}): {len(a.clips)} clips, {len(a.chapters)} chapters, "
                       f"{len(a.broll)} b-roll cues, music mood '{a.music_mood}'")
@@ -242,9 +248,22 @@ class Project:
             })
         return results
 
-    def find_clips(self) -> list[dict]:
-        """Clip finder: the best moments, cut and resized but not otherwise edited."""
-        return self.render_plans([self.plan_raw(c, i) for i, c in enumerate(self.analysis().clips, 1)])
+    def find_clips(self, clips: list[ClipIdea] | None = None) -> list[dict]:
+        """Clip finder: export moments cut and resized but not otherwise edited.
+
+        ``clips`` are the ones the person chose (possibly with adjusted start/end); default: all found.
+        """
+        clips = clips if clips is not None else self.analysis().clips
+        dur = self.transcript().duration
+        plans = []
+        for i, c in enumerate(clips, 1):
+            c.start, c.end = max(0.0, c.start), min(c.end, dur)
+            if c.end - c.start >= 1:
+                plans.append(self.plan_raw(c, i))
+        return self.render_plans(plans)
+
+    def clip_text(self, start: float, end: float) -> str:
+        return self.transcript().text_between(start, end)
 
     def auto_edit(self, start: float | None = None, end: float | None = None) -> list[dict]:
         """Automatic editor: a time range (e.g. a clip from the finder) or the whole video."""

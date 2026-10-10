@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from clipforge.analyze import ClipIdea
 from clipforge.assets import AUDIO_EXT, VIDEO_EXT
 from clipforge.config import MOODS, Settings
 from clipforge.formats import FORMATS
@@ -91,10 +92,21 @@ class JobOptions(BaseModel):
     language: str | None = None
 
 
+class ClipIn(BaseModel):
+    start: float
+    end: float
+    title: str = "Clip"
+    hook_text: str = ""
+    virality_score: int = 0
+    reason: str = ""
+    music_mood: str = "upbeat"
+
+
 class JobRequest(BaseModel):
-    type: str                             # "find_clips" | "auto_edit"
+    type: str                             # "analyze" | "find_clips" | "auto_edit"
     video_id: str
     range: list[float] | None = None      # auto_edit only: [start, end] in source seconds
+    clips: list[ClipIn] | None = None     # find_clips only: the clips to export (default: all found)
     options: JobOptions = JobOptions()
 
 
@@ -153,16 +165,21 @@ def _worker() -> None:
             project.transcript()
             job["phase"] = "analyzing"
             analysis = project.analysis()
-            job["clips"] = [c.__dict__ for c in analysis.clips]
+            job["clips"] = [c.__dict__ | {"text": project.clip_text(c.start, c.end)} for c in analysis.clips]
             job["phase"] = "rendering"
-            if req.type == "find_clips":
-                outputs = project.find_clips()
+            if req.type == "analyze":
+                outputs = []          # preview only: nothing is rendered until clips are chosen
+            elif req.type == "find_clips":
+                chosen = [ClipIdea(**c.model_dump()) for c in req.clips] if req.clips else None
+                outputs = project.find_clips(chosen)
             else:
                 rng = req.range if req.range and len(req.range) == 2 else [None, None]
                 outputs = project.auto_edit(*rng)
             job["outputs"] = [_public_output(req.video_id, o) for o in outputs]
             failed = [o for o in outputs if o.get("error")]
             job["status"] = "error" if failed and len(failed) == len(outputs) else "done"
+            if req.type == "analyze" and not analysis.clips:
+                job["status"], job["error"] = "error", "No clips found. Try a shorter clip length or a longer video."
             if job["status"] == "error":
                 job["error"] = failed[0]["error"]
         except Exception as e:  # report every failure to the UI
@@ -283,8 +300,8 @@ async def upload_audio(file: UploadFile = File(...)) -> dict:
 
 @app.post("/api/jobs", dependencies=[Depends(check_access)])
 def create_job(req: JobRequest) -> dict:
-    if req.type not in ("find_clips", "auto_edit"):
-        raise HTTPException(400, "type must be find_clips or auto_edit")
+    if req.type not in ("analyze", "find_clips", "auto_edit"):
+        raise HTTPException(400, "type must be analyze, find_clips or auto_edit")
     if not (VIDEOS / _safe_id(req.video_id) / "info.json").exists():
         raise HTTPException(404, "Unknown video")
     job_id = uuid.uuid4().hex[:12]

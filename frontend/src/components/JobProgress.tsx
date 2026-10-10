@@ -7,13 +7,25 @@ const PHASES: { id: Job["phase"]; label: string }[] = [
 ];
 
 export default function JobProgress({ job, uploading }: { job: Job | null; uploading?: boolean }) {
-  const phaseIndex = job?.status === "done" ? 3 : PHASES.findIndex((p) => p.id === job?.phase);
+  // Finding clips stops after analysis; nothing is rendered.
+  const phases = job?.type === "analyze" ? PHASES.slice(0, 2) : PHASES;
+  const phaseIndex = job?.status === "done" ? phases.length : phases.findIndex((p) => p.id === job?.phase);
   const pct =
-    job?.status === "done" ? 100 : job?.phase === "rendering" ? 40 + job.progress * 58 : phaseIndex >= 0 ? 8 + phaseIndex * 16 : 3;
+    job?.status === "done"
+      ? 100
+      : job?.phase === "rendering"
+        ? 40 + job.progress * 58
+        : job?.phase === "analyzing"
+          ? job.type === "analyze" ? 85 : 32
+          : job?.phase === "transcribing" && job.progress
+          ? 5 + job.progress * (job.type === "analyze" ? 75 : 25)
+          : phaseIndex >= 0
+            ? 8 + phaseIndex * (job?.type === "analyze" ? 40 : 16)
+            : 3;
   return (
     <div className="panel progress-panel">
       <div className="phases">
-        {PHASES.map((p, k) => (
+        {phases.map((p, k) => (
           <div key={p.label} className={`phase ${k < phaseIndex ? "done" : k === phaseIndex ? "current" : ""}`}>
             <span className="phase-dot">{k < phaseIndex ? "✓" : k + 1}</span>
             {p.label}
