@@ -251,7 +251,7 @@ def analyze_heuristic(tr: Transcript, settings: Settings, log) -> Analysis:
     )
 
 
-BROLL_VERSION = 2   # bump when heuristic b-roll changes, so saved plans get fresh b-roll
+BROLL_VERSION = 3   # bump when heuristic b-roll changes, so saved plans get fresh b-roll
 
 
 def heuristic_broll(tr: Transcript, settings: Settings) -> tuple[list[BrollIdea], str]:

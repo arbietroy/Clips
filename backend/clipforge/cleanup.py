@@ -52,8 +52,10 @@ def find_removals(words: list[Word], fillers: bool = True, repetition: bool = Tr
             if w.text.endswith(("-", "—")) and i not in drop:
                 drop.add(i)
     if retakes:
+        drop |= find_offscript(words, drop)
         drop |= find_cued_retakes(words, drop)
         drop |= find_retakes(words, drop)
+        drop |= find_rephrased_retakes(words, drop)
     return drop
 
 
@@ -143,6 +145,99 @@ def find_cued_retakes(words: list[Word], already: set[int] | None = None,
             start = a                                # never cut a long stretch on a guess
         drop.update(kept[start:b])
         p = b
+    return drop
+
+
+# Talk aimed at the crew or at themselves, not at the audience.
+OFFSCRIPT_PHRASES = [
+    "is it recording", "are we recording", "is this recording", "is it on", "is the camera on", "are we rolling",
+    "is it rolling", "can you hear me", "can you see me", "is my mic on", "is the mic on", "is this okay",
+    "was that okay", "was that good", "is that good", "how was that", "was that fine", "should i start",
+    "can i start", "when do i start", "do i start now", "should i go", "are you ready", "are we ready",
+    "what was i saying", "where was i", "what am i saying", "i forgot what i was saying", "i forgot my line",
+    "i forgot my lines", "i dont remember", "give me a second", "give me a minute", "give me one second",
+    "one second", "one sec", "let me check my notes", "let me see my notes", "let me check", "hold on",
+    "okay lets go", "alright lets go", "ok lets go", "lets go again", "stop recording", "turn it off",
+    "you can cut this", "you can cut that", "you can edit this", "you can edit that", "we can edit this",
+    "we can cut this", "and action", "action", "three two one", "3 2 1", "testing testing", "mic check",
+]
+_EMPTY_WORDS = {"okay", "ok", "alright", "right", "so", "yeah", "um", "uh", "umm", "well", "anyway", "hmm",
+                "sorry", "erm", "ah", "oh", ""}
+_OFFSCRIPT = sorted((tuple(p.split()) for p in OFFSCRIPT_PHRASES), key=len, reverse=True)
+
+
+def _sentences(words: list[Word], kept: list[int]) -> list[list[int]]:
+    """Group kept word indices into sentences (punctuation or a pause of over a second)."""
+    out: list[list[int]] = []
+    cur: list[int] = []
+    for i in kept:
+        if cur:
+            prev = words[cur[-1]]
+            if prev.text.rstrip().endswith((".", "!", "?")) or words[i].start - prev.end > 1.0:
+                out.append(cur)
+                cur = []
+        cur.append(i)
+    if cur:
+        out.append(cur)
+    return out
+
+
+def find_offscript(words: list[Word], already: set[int] | None = None, max_len: int = 12) -> set[int]:
+    """Drop short sentences spoken to the crew or to oneself ("is it recording?", "where was I?",
+    "okay let's go"). In a longer sentence only the phrase itself goes."""
+    already = already or set()
+    kept = [i for i in range(len(words)) if i not in already]
+    drop: set[int] = set()
+    for sent in _sentences(words, kept):
+        norms = [words[i].norm.replace("'", "") for i in sent]
+        if len(norms) <= 3 and all(n in _EMPTY_WORDS for n in norms):
+            drop.update(sent)             # "Okay." / "Alright, so." on its own says nothing
+            continue
+        for p in range(len(norms)):
+            hit = next((c for c in _OFFSCRIPT if tuple(norms[p:p + len(c)]) == c), None)
+            if not hit:
+                continue
+            if hit in (("action",), ("hold", "on"), ("one", "second")) and len(sent) > 4:
+                continue          # common in normal speech; only a cue when it stands alone
+            if len(sent) <= max_len:
+                drop.update(sent)
+            else:
+                drop.update(sent[p:p + len(hit)])
+            break
+    return drop
+
+
+_STOP = set("""a an the and or but so to of in on at by for with from is are was were be been am i you he she it we
+they me him her us them my your his its our their this that these those there here what which who when where why
+how all any not no do does did have has had will would can could should just very really like um uh okay ok yeah
+well also then now one get got going gonna""".split())
+
+
+def find_rephrased_retakes(words: list[Word], already: set[int] | None = None, window_s: float = 40.0,
+                           min_words: int = 4, overlap: float = 0.6) -> set[int]:
+    """A sentence said again shortly after in slightly different words: keep only the last version.
+
+        "Voting is the most important thing we can do."  …  "Voting is the most important thing you can do."
+    """
+    already = already or set()
+    kept = [i for i in range(len(words)) if i not in already]
+    sents = _sentences(words, kept)
+    content = [[words[i].norm for i in s if words[i].norm and words[i].norm not in _STOP] for s in sents]
+    drop: set[int] = set()
+    for a, sa in enumerate(sents):
+        ca = content[a]
+        if len(ca) < min_words:
+            continue
+        for b in range(a + 1, min(a + 4, len(sents))):
+            if words[sents[b][0]].start - words[sa[0]].start > window_s:
+                break
+            cb = content[b]
+            if len(cb) < min_words * 0.75 or ca[0] != cb[0]:
+                continue
+            shared = len(set(ca) & set(cb)) / len(set(ca))
+            if shared >= overlap:
+                drop.update(sa)
+                break
     return drop
 
 

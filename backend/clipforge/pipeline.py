@@ -22,7 +22,8 @@ from .transcript import LANGUAGE_NAMES, Transcript, transcribe
 # Bump when editing improves in a way that should be offered as an update for older renders.
 # 3: English by default, called-off takes cut, topic-aware b-roll.
 # 4: stricter b-roll topics, saved plans get the new b-roll.
-ENGINE_VERSION = 4
+# 5: b-roll searches that return footage + required subject tags; off-script talk, rephrased retakes, tighter pauses.
+ENGINE_VERSION = 5
 
 
 def slugify(text: str, max_len: int = 40) -> str:
