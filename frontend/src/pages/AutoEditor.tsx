@@ -8,7 +8,7 @@ import TemplatePicker from "../components/TemplatePicker";
 import Toggle from "../components/Toggle";
 import UploadDrop from "../components/UploadDrop";
 import { FormatId } from "../data/formats";
-import { MOODS } from "../data/templates";
+import { LANGUAGES, MOODS } from "../data/templates";
 import { apiUrl, createJob, getVideo, JobOptions, Output, uploadAudio, VideoInfo } from "../lib/api";
 import { fmtTime, rememberVideo, useJob } from "../lib/hooks";
 
@@ -42,6 +42,7 @@ export default function AutoEditor() {
   const [fillers, setFillers] = useState(true);
   const [aggressive, setAggressive] = useState(false);
   const [retakes, setRetakes] = useState(true);
+  const [language, setLanguage] = useState("en");
 
   // export
   const [format, setFormat] = useState<FormatValue>({
@@ -108,6 +109,7 @@ export default function AutoEditor() {
     fillers,
     aggressive,
     retakes,
+    language,
   });
 
   const run = async (f: FormatValue) => {
@@ -173,6 +175,15 @@ export default function AutoEditor() {
             <button className="link" disabled={!!running} onClick={() => (setVideo(null), setParams({}), setResults([]), setJobId(null))}>
               Use a different video
             </button>
+
+            <label className="field top-gap">
+              Spoken language
+              <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>{l.name}</option>
+                ))}
+              </select>
+            </label>
 
             <h3>What to edit</h3>
             <div className="seg">

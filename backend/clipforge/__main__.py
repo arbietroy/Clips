@@ -20,7 +20,7 @@ def _settings(args) -> Settings:
     s.clip_min_seconds = max(15.0, args.length * 0.75)
     s.clip_max_seconds = args.length * 1.25
     s.whisper_model = args.whisper
-    s.language = args.language
+    s.language = None if args.language == "auto" else args.language
     s.use_claude = not args.no_ai
     s.captions = not args.no_captions
     s.music = not args.no_music
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("-n", "--clips", type=int, default=5, help="number of shorts to cut (default 5)")
         sp.add_argument("--length", type=float, default=60, help="target short length in seconds (default 60)")
         sp.add_argument("--whisper", default="small", help="whisper model: tiny/base/small/medium/large-v3")
-        sp.add_argument("--language", default=None, help="spoken language code, e.g. en (default: auto)")
+        sp.add_argument("--language", default="en", help="spoken language code, e.g. en, fr, yo (default: en; 'auto' to detect)")
         sp.add_argument("--transcript", type=Path, help="use an existing transcript JSON instead of Whisper")
         sp.add_argument("--no-ai", action="store_true", help="don't call Claude; use the heuristic planner")
         sp.add_argument("--refresh", action="store_true", help="re-run the analysis even if cached")

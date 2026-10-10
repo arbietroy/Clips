@@ -7,6 +7,7 @@ import JobProgress from "../components/JobProgress";
 import OutputCard from "../components/OutputCard";
 import Toggle from "../components/Toggle";
 import { apiUrl, ClipIdea, createJob, deleteProject, getProject, Output, Project } from "../lib/api";
+import { LANGUAGES } from "../data/templates";
 import { fmtTime, rememberVideo, useJob } from "../lib/hooks";
 
 type Filter = "all" | "raw" | "edits";
@@ -42,6 +43,7 @@ export default function ProjectPage() {
   const [numClips, setNumClips] = useState(5);
   const [length, setLength] = useState(60);
   const [clean, setClean] = useState(false);
+  const [language, setLanguage] = useState("en");
   const [format, setFormat] = useState<FormatValue>({ format: "vertical", reframe: "face", rotate: "auto" });
   const [draft, setDraft] = useState<Draft>(() => loadDraft(id));
   const [filter, setFilter] = useState<Filter>("all");
@@ -54,6 +56,7 @@ export default function ProjectPage() {
     try {
       const p = await getProject(id);
       setProject(p);
+      setLanguage(p.language || "en");
       rememberVideo(p);
       // Pick up a job that is still running (e.g. after coming back from the Auto Editor).
       if (p.active_jobs.length) setJobId((cur) => cur ?? p.active_jobs[p.active_jobs.length - 1]);
@@ -95,7 +98,7 @@ export default function ProjectPage() {
   const find = async () => {
     setError(null);
     try {
-      const j = await createJob({ type: "analyze", video_id: id, options: { num_clips: numClips, length } });
+      const j = await createJob({ type: "analyze", video_id: id, options: { num_clips: numClips, length, language } });
       setDraft({ trims: {}, unselected: [] });
       setJobId(j.id);
     } catch (e: any) {
@@ -176,6 +179,17 @@ export default function ProjectPage() {
             <span>Clip length: <b>about {length} seconds</b></span>
             <input type="range" min={15} max={120} step={5} value={length} onChange={(e) => setLength(+e.target.value)} />
           </label>
+          <label className="field">
+            <span>Spoken language (subtitles are written in it)</span>
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.name}</option>
+              ))}
+            </select>
+          </label>
+          {suggested.length > 0 && language !== (project.language || "en") && (
+            <p className="notice small">Changing the language re-transcribes the video and finds new clips.</p>
+          )}
           <button className="btn big full" disabled={!!running} onClick={find}>
             {running && job?.type === "analyze" ? "Finding clips…" : suggested.length ? "Find clips again" : "Find viral clips"}
           </button>

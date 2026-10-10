@@ -10,6 +10,13 @@ from pathlib import Path
 
 # Whisper tends to "clean up" disfluencies. Priming it with a disfluent prompt makes it
 # keep the ums and uhs, which we need in order to cut them out.
+# Languages offered in the app (Whisper codes). English is the default everywhere.
+LANGUAGE_NAMES = {
+    "en": "English", "fr": "French", "es": "Spanish", "pt": "Portuguese", "de": "German", "it": "Italian",
+    "nl": "Dutch", "ar": "Arabic", "hi": "Hindi", "yo": "Yoruba", "ha": "Hausa", "sw": "Swahili",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ru": "Russian", "tr": "Turkish",
+}
+
 FILLER_PROMPT = "Umm, let me think like, hmm... Okay, uh, here's what I'm, like, thinking. So, um, you know."
 
 
@@ -108,7 +115,8 @@ def transcribe(video: Path, model_size: str = "small", language: str | None = No
         audio,
         language=language,
         word_timestamps=True,
-        initial_prompt=FILLER_PROMPT,
+        # The English prompt keeps the ums in; for other languages it would only confuse the model.
+        initial_prompt=FILLER_PROMPT if language in (None, "en") else None,
         beam_size=5,
         condition_on_previous_text=False,
     )

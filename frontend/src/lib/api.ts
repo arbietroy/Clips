@@ -121,6 +121,7 @@ export interface ProjectSummary extends VideoInfo {
 export interface Project extends ProjectSummary {
   clips: ClipIdea[];
   outputs: Output[];
+  language: string;
 }
 
 export interface JobOptions {
@@ -147,6 +148,7 @@ export interface JobOptions {
   reframe?: string;
   rotate?: string;
   whisper?: string;
+  language?: string;
 }
 
 export interface Job {

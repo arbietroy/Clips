@@ -36,7 +36,7 @@ from clipforge.log import Log
 from clipforge.media import probe, run_ffmpeg
 from clipforge.pipeline import list_outputs
 from clipforge.render import ROTATE_FILTERS
-from clipforge.transcript import Transcript
+from clipforge.transcript import LANGUAGE_NAMES, Transcript
 from clipforge.reframe import detect_rotation
 from clipforge.templates import TEMPLATES
 
@@ -112,7 +112,7 @@ class JobOptions(BaseModel):
     reframe: str = "face"
     rotate: str = "auto"                  # auto | 0 | 90 | 180 | 270 (clockwise)
     whisper: str = os.environ.get("WHISPER_MODEL", "small")
-    language: str | None = None
+    language: str | None = "en"           # spoken language; "auto" to detect
 
 
 class ClipIn(BaseModel):
@@ -158,7 +158,7 @@ def build_settings(o: JobOptions) -> Settings:
     s.reframe = o.reframe if o.reframe in ("face", "blur", "center") else "face"
     s.rotate = o.rotate if o.rotate in ("auto", "0", "90", "180", "270") else "auto"
     s.whisper_model = o.whisper if o.whisper in ("tiny", "base", "small", "medium", "large-v3") else "small"
-    s.language = o.language
+    s.language = None if o.language in (None, "", "auto") else o.language
     s.music_dir = HERE / "music"
     s.broll_dir = HERE / "broll"
     return s
@@ -185,7 +185,13 @@ def _worker() -> None:
             req: JobRequest = job["request"]
             vdir = VIDEOS / req.video_id
             source = next(vdir.glob("source.*"))
-            project = Project(source, vdir, build_settings(req.options), Log(sink), project_dir=vdir / "project")
+            settings = build_settings(req.options)
+            if req.type != "analyze":
+                # Exports and edits use the project's existing transcript, whatever language it was made in.
+                done = _transcript_language(vdir / "project")
+                if done:
+                    settings.language = None if done == "auto" else done
+            project = Project(source, vdir, settings, Log(sink), project_dir=vdir / "project")
             job["phase"] = "transcribing"
             project.transcript()
             job["phase"] = "analyzing"
@@ -215,6 +221,17 @@ def _worker() -> None:
 
 
 threading.Thread(target=_worker, daemon=True).start()
+
+
+def _transcript_language(proj: Path) -> str | None:
+    """The language a project's saved transcript was made in ("en", "fr", "auto"…), if there is one."""
+    try:
+        data = json.loads((proj / "transcript.json").read_text())
+    except (OSError, ValueError):
+        return None
+    # Transcripts made before languages were chosen don't count: they are redone in the requested language
+    # (this is what fixes videos that were wrongly auto-detected, e.g. as Chinese).
+    return (data.get("extra") or {}).get("requested_language")
 
 
 def _public_output(video_id: str, o: dict) -> dict:
@@ -258,6 +275,7 @@ def health() -> dict:
         "formats": FORMATS,
         "templates": list(TEMPLATES),
         "moods": MOODS,
+        "languages": LANGUAGE_NAMES,
     }
 
 
@@ -385,7 +403,7 @@ def get_project(video_id: str) -> dict:
             clips = [c | {"text": tr.text_between(c["start"], c["end"])} for c in clips]
         clips.sort(key=lambda c: -c.get("virality_score", 0))
     outputs = [_public_output(video_id, o) for o in list_outputs(proj)] if proj.exists() else []
-    return summary | {"clips": clips, "outputs": outputs}
+    return summary | {"clips": clips, "outputs": outputs, "language": _transcript_language(proj) or "en"}
 
 
 @app.delete("/api/projects/{video_id}", dependencies=[Depends(check_access)])

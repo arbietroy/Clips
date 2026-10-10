@@ -52,7 +52,92 @@ def find_removals(words: list[Word], fillers: bool = True, repetition: bool = Tr
             if w.text.endswith(("-", "—")) and i not in drop:
                 drop.add(i)
     if retakes:
+        drop |= find_cued_retakes(words, drop)
         drop |= find_retakes(words, drop)
+    return drop
+
+
+# Things people say when they mess up a take and go again. Matched on normalised words.
+RETAKE_CUES = [
+    "let me start again", "let me start over", "let me start that again", "let me restart", "start again",
+    "start over", "let me redo", "let me redo that", "let me do that again", "let me do it again",
+    "let me take that again", "let me take it again", "let me say that again", "let me say it again",
+    "let me try that again", "let me try again", "let me go again", "let me rephrase", "let me rephrase that",
+    "lets do that again", "lets go again", "lets start again", "lets try again", "lets take that again",
+    "one more time", "take two", "take 2", "from the top", "scratch that", "cut cut", "cut that",
+    "i messed up", "i messed that up", "i made a mistake", "oh my god stop", "oh my gosh stop",
+    "wait wait", "hold on hold on", "sorry sorry", "sorry again", "no no no", "stop stop",
+]
+# These also occur in normal speech ("we will start again next year"), so they only count as a cue
+# when they open a phrase.
+_AMBIGUOUS_CUES = {("start", "again"), ("start", "over"), ("one", "more", "time"), ("from", "the", "top"),
+                   ("take", "two"), ("take", "2"), ("cut", "that"), ("no", "no", "no")}
+_CUES = sorted((tuple(c.split()) for c in RETAKE_CUES), key=len, reverse=True)
+_SOFT_LEADS = {"oh", "my", "god", "gosh", "okay", "ok", "sorry", "wait", "no", "stop", "hold", "on", "so",
+               "alright", "right", "um", "uh", "hmm", "ah", "jeez", "damn", "shoot", "cut"}
+
+
+def find_cued_retakes(words: list[Word], already: set[int] | None = None,
+                      max_back_s: float = 25.0) -> set[int]:
+    """Cut takes the speaker called off out loud ("oh my God, stop, let me start again").
+
+    Removes the cue (plus the exclamations around it) and the attempt it abandons: back to where the
+    speaker restarts from if the next words repeat earlier ones, otherwise back to the start of the
+    sentence that was cut off.
+    """
+    already = already or set()
+    kept = [i for i in range(len(words)) if i not in already]
+    norms = [words[i].norm.replace("'", "") for i in kept]
+    drop: set[int] = set()
+
+    def sentence_start(pos: int) -> int:
+        """Index (in kept) of the first word of the sentence containing kept[pos]."""
+        p = pos
+        while p > 0:
+            prev, cur = words[kept[p - 1]], words[kept[p]]
+            if prev.text.rstrip().endswith((".", "!", "?")) or cur.start - prev.end > 1.2:
+                break
+            p -= 1
+        return p
+
+    p = 0
+    while p < len(kept):
+        cue = next((c for c in _CUES if tuple(norms[p:p + len(c)]) == c), None)
+        if cue in _AMBIGUOUS_CUES and p > 0:
+            prev, cur = words[kept[p - 1]], words[kept[p]]
+            opens = (prev.text.rstrip().endswith((".", ",", "!", "?", ";", ":")) or cur.start - prev.end > 0.4
+                     or norms[p - 1] in _SOFT_LEADS)
+            if not opens:
+                cue = None
+        if not cue:
+            p += 1
+            continue
+        a, b = p, p + len(cue)                       # cue spans kept[a:b]
+        while a > 0 and norms[a - 1] in _SOFT_LEADS and words[kept[a]].start - words[kept[a - 1]].end < 1.5:
+            a -= 1                                   # "oh my god, stop, ..." before the cue
+        while b < len(kept) and norms[b] in _SOFT_LEADS - {"so"}:
+            b += 1                                   # "... okay, alright" after it
+        # Where does the abandoned attempt begin?
+        start = None
+        nxt = norms[b:b + 3]
+        if len(nxt) >= 2:
+            for q in range(a - 1, -1, -1):
+                if words[kept[a]].start - words[kept[q]].start > max_back_s:
+                    break
+                if norms[q:q + 2] == nxt[:2]:
+                    start = q                        # they restart from here: cut the earlier try
+                    s0 = sentence_start(q)           # ...and any "okay, so" that led into it
+                    while start > s0 and norms[start - 1] in _SOFT_LEADS:
+                        start -= 1
+                    break
+        if start is None:
+            s0 = sentence_start(a)
+            # The cue opens a new sentence: the attempt being redone is the previous sentence.
+            start = sentence_start(s0 - 1) if s0 == a and a > 0 else s0
+        if words[kept[a]].start - words[kept[start]].start > max_back_s:
+            start = a                                # never cut a long stretch on a guess
+        drop.update(kept[start:b])
+        p = b
     return drop
 
 

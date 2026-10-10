@@ -29,7 +29,7 @@ class Settings:
 
     # --- transcription ---
     whisper_model: str = "small"             # tiny / base / small / medium / large-v3
-    language: str | None = None              # None = auto-detect
+    language: str | None = "en"              # spoken language; English unless the person picks another (None = auto)
 
     # --- cleanup ---
     remove_fillers: bool = True

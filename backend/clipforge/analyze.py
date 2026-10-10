@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 
+from .broll_concepts import concepts_in, main_topics
 from .config import MOODS, TRANSITIONS, Settings
 from .transcript import Transcript
 
@@ -169,6 +170,13 @@ def analyze_with_claude(tr: Transcript, settings: Settings, log) -> Analysis:
 # Heuristic fallback
 # ---------------------------------------------------------------------------
 
+TOPIC_MOODS = {
+    "politics": "dramatic", "law": "suspense", "war": "dramatic", "money": "corporate", "business": "corporate",
+    "work": "corporate", "technology": "energetic", "education": "inspirational", "health": "inspirational",
+    "family": "emotional", "food": "upbeat", "home": "chill", "travel": "upbeat", "nature": "chill",
+    "culture": "upbeat", "ideas": "inspirational",
+}
+
 HOOK_WORDS = {
     "secret", "never", "always", "mistake", "truth", "biggest", "worst", "best", "nobody", "everyone",
     "why", "how", "stop", "money", "million", "crazy", "insane", "shocking", "actually", "wrong",
@@ -229,19 +237,28 @@ def analyze_heuristic(tr: Transcript, settings: Settings, log) -> Analysis:
     broll, emphasis = [], []
     last_b, last_e = -999.0, -999.0
     gap = 60.0 / max(settings.max_broll_per_minute, 0.1) * 1.5
+    topics = main_topics([w.text for w in tr.words])
+    recent: list[str] = []
     for s in segs:
-        if s.start - last_b >= gap and s.end - s.start >= 2.5:
-            kw = _keyword(s.text)
-            if kw:
-                broll.append(BrollIdea(s.start + 0.3, min(s.end, s.start + 3.5), kw))
-                last_b = s.start
-        for w in tr.words_between(s.start, s.end):
+        words = tr.words_between(s.start, s.end)
+        if s.start - last_b >= gap:
+            # Only where a clear subject is named, preferring the video's main topics.
+            found = [(i, c) for i, c in concepts_in([w.text for w in words]) if c.query not in recent[-2:]]
+            if found:
+                found.sort(key=lambda x: (x[1].topic not in topics, x[0]))
+                i, c = found[0]
+                t0 = words[i].start
+                broll.append(BrollIdea(round(max(s.start, t0 - 0.2), 3), round(t0 + 3.2, 3), c.query))
+                recent.append(c.query)
+                last_b = t0
+        for w in words:
             if (w.norm in HOOK_WORDS or w.text.endswith("!")) and w.start - last_e >= 8:
                 emphasis.append(w.start)
                 last_e = w.start
 
     return Analysis(
-        summary="", music_mood="upbeat", clips=clips, chapters=chapters, broll=broll,
+        summary="", music_mood=TOPIC_MOODS.get(topics[0] if topics else "", "upbeat"), clips=clips,
+        chapters=chapters, broll=broll,
         emphasis=emphasis, remove=[], transition_style="fade", source="heuristic",
     )
 
@@ -255,13 +272,6 @@ def _hook_from(text: str) -> str:
 def _title_from(text: str) -> str:
     kws = [w for w in re.findall(r"[A-Za-z']+", text) if w.lower() not in STOPWORDS and len(w) > 3]
     return " ".join(kws[:3]).title() or "Next"
-
-
-def _keyword(text: str) -> str | None:
-    words = [w.lower() for w in re.findall(r"[A-Za-z]+", text) if len(w) > 4 and w.lower() not in STOPWORDS]
-    if not words:
-        return None
-    return Counter(words).most_common(1)[0][0]
 
 
 # ---------------------------------------------------------------------------

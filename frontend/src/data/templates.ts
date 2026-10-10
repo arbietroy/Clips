@@ -35,3 +35,25 @@ export const TEMPLATES: CaptionTemplate[] = [
 ];
 
 export const MOODS = ["upbeat", "inspirational", "chill", "dramatic", "emotional", "energetic", "corporate", "funny", "suspense", "hiphop"];
+
+// Spoken language of the video (subtitles are written in it). English unless the person picks another.
+export const LANGUAGES: { code: string; name: string }[] = [
+  { code: "en", name: "English" },
+  { code: "fr", name: "French" },
+  { code: "es", name: "Spanish" },
+  { code: "pt", name: "Portuguese" },
+  { code: "de", name: "German" },
+  { code: "it", name: "Italian" },
+  { code: "nl", name: "Dutch" },
+  { code: "ar", name: "Arabic" },
+  { code: "hi", name: "Hindi" },
+  { code: "yo", name: "Yoruba" },
+  { code: "ha", name: "Hausa" },
+  { code: "sw", name: "Swahili" },
+  { code: "zh", name: "Chinese" },
+  { code: "ja", name: "Japanese" },
+  { code: "ko", name: "Korean" },
+  { code: "ru", name: "Russian" },
+  { code: "tr", name: "Turkish" },
+  { code: "auto", name: "Detect automatically" },
+];

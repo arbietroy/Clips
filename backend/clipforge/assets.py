@@ -6,6 +6,8 @@ import hashlib
 import re
 from pathlib import Path
 
+from .broll_concepts import normalise, query_tokens
+
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
 
@@ -105,9 +107,14 @@ def _pexels(query: str, orientation: str, api_key: str, min_seconds: float) -> l
     )
     r.raise_for_status()
     target_w = 1080 if orientation == "portrait" else 1920
+    wanted = query_tokens(query)
     out = []
     for video in r.json().get("videos", []):
         if video.get("duration", 0) < min_seconds:
+            continue
+        # Pexels has no tags, but its page URL is a description ("/video/people-voting-at-a-booth-123/").
+        slug = {normalise(t) for t in re.split(r"[-/]", video.get("url", "")) if t}
+        if slug and not slug & wanted:
             continue
         files = [f for f in video.get("video_files", []) if f.get("file_type") == "video/mp4" and f.get("width")]
         if files:
@@ -128,10 +135,14 @@ def _pixabay(query: str, orientation: str, api_key: str, min_seconds: float) -> 
     )
     r.raise_for_status()
     target_w = 1080 if orientation == "portrait" else 1920
+    wanted = query_tokens(query)
     ranked = []
     for hit in r.json().get("hits", []):
         if hit.get("duration", 0) < min_seconds:
             continue
+        tags = {normalise(t) for t in re.split(r"[,\s]+", hit.get("tags", "")) if t}
+        if not tags & wanted:
+            continue                      # search matched something unrelated: skip rather than show it
         sizes = [v for v in (hit.get("videos") or {}).values() if v.get("url") and v.get("width")]
         if not sizes:
             continue

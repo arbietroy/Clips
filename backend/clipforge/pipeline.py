@@ -16,7 +16,7 @@ from .log import Log
 from .media import MediaInfo, output_fps, probe, require_ffmpeg
 from .reframe import detect_rotation
 from .render import EditPlan, render
-from .transcript import Transcript, transcribe
+from .transcript import LANGUAGE_NAMES, Transcript, transcribe
 
 
 def slugify(text: str, max_len: int = 40) -> str:
@@ -59,6 +59,18 @@ class Project:
         cache.write_text(json.dumps({"auto": rot}))
         return rot
 
+    def _cached_transcript_ok(self) -> bool:
+        """Re-transcribe when the spoken language changed (or an old transcript came out in the wrong one)."""
+        try:
+            data = json.loads(self.transcript_path.read_text())
+        except (OSError, ValueError):
+            return False
+        wanted = self.settings.language or "auto"
+        requested = (data.get("extra") or {}).get("requested_language")
+        if requested is None:          # made before languages were tracked: trust it only if it matches
+            return wanted == "auto" or data.get("language") == wanted
+        return requested == wanted
+
     # ---------------------------------------------------------------- steps
 
     @property
@@ -71,13 +83,17 @@ class Project:
         if import_from:
             tr = Transcript.load(import_from)
             tr.save(self.transcript_path)
-        elif self.transcript_path.exists():
+        elif self.transcript_path.exists() and self._cached_transcript_ok():
             self.log.info("Using cached transcript")
             tr = Transcript.load(self.transcript_path)
         else:
-            self.log.info("Transcribing speech (word-level timestamps)…")
-            tr = transcribe(self.video, self.settings.whisper_model, self.settings.language, self.log)
+            lang = self.settings.language
+            self.log.info(f"Transcribing speech in {LANGUAGE_NAMES.get(lang, lang or 'auto-detected language')}…")
+            tr = transcribe(self.video, self.settings.whisper_model, lang, self.log)
+            tr.extra["requested_language"] = lang or "auto"
             tr.save(self.transcript_path)
+            # A new transcript means new clip suggestions and cuts.
+            (self.dir / "analysis.json").unlink(missing_ok=True)
         tr.duration = tr.duration or self.info.duration
         self.log.info(f"Transcript: {len(tr.words)} words, {tr.duration:.0f}s")
         self._transcript = tr
@@ -91,7 +107,7 @@ class Project:
         path = self.dir / "analysis.json"
         s = self.settings
         params = {"num_clips": s.num_clips, "min": s.clip_min_seconds, "max": s.clip_max_seconds,
-                  "target": s.clip_target_seconds, "ai": s.use_claude}
+                  "target": s.clip_target_seconds, "ai": s.use_claude, "language": s.language or "auto"}
         cached = Analysis.from_dict(json.loads(path.read_text())) if path.exists() and not refresh else None
         # Re-run when the clip count or length changed; a heuristic result is also redone once AI is available.
         if cached and (reuse or cached.extra.get("params") == params):
