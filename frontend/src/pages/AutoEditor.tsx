@@ -45,7 +45,7 @@ export default function AutoEditor() {
   // export
   const [format, setFormat] = useState<FormatValue>({
     format: (params.get("format") as FormatId) || "vertical",
-    reframe: "face",
+    reframe: "face", rotate: "auto",
   });
   const [asking, setAsking] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -160,6 +160,9 @@ export default function AutoEditor() {
             <p className="meta">
               {video.name} · {fmtTime(video.duration)} · {video.width}×{video.height}
             </p>
+            {!!video.rotation && (
+              <p className="notice small">Looks sideways: it will be turned upright when exported.</p>
+            )}
             <button className="link" disabled={!!running} onClick={() => (setVideo(null), setParams({}), setResults([]), setJobId(null))}>
               Use a different video
             </button>

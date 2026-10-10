@@ -13,6 +13,7 @@ from .config import Settings
 from .formats import resolve_size
 from .log import Log
 from .media import MediaInfo, output_fps, probe, require_ffmpeg
+from .reframe import detect_rotation
 from .render import EditPlan, render
 from .transcript import Transcript, transcribe
 
@@ -37,10 +38,25 @@ class Project:
         if not self.info.has_audio:
             raise ValueError("The video has no audio track – ClipForge edits from the speech.")
         self.fps = output_fps(self.info.fps)
+        self.rotation = self._rotation()
+        # Size of the picture after rotation (what the viewer should see).
+        self.width, self.height = ((self.info.height, self.info.width) if self.rotation in (90, 270)
+                                   else (self.info.width, self.info.height))
         self._transcript: Transcript | None = None
         self._analysis: Analysis | None = None
         self._drop: set[int] | None = None
         self._used_broll: set[str] = set()
+
+    def _rotation(self) -> int:
+        choice = str(self.settings.rotate or "auto")
+        if choice != "auto":
+            return int(choice) if choice in ("0", "90", "180", "270") else 0
+        cache = self.dir / "rotation.json"
+        if cache.exists():
+            return int(json.loads(cache.read_text()).get("auto", 0))
+        rot = detect_rotation(self.video, log=self.log)
+        cache.write_text(json.dumps({"auto": rot}))
+        return rot
 
     # ---------------------------------------------------------------- steps
 
@@ -128,12 +144,12 @@ class Project:
 
     def _base(self, name: str, kind: str, segments) -> EditPlan:
         s = self.settings
-        w, h = resolve_size(s.format, self.info.width, self.info.height, s.custom_size)
+        w, h = resolve_size(s.format, self.width, self.height, s.custom_size)
         return EditPlan(
             name=name, kind=kind, source=str(self.video), segments=segments, width=w, height=h,
             fps=self.fps, captions=s.captions, caption_template=s.caption_template,
             caption_highlight=s.caption_highlight, zoom_on_jump_cuts=s.zoom_on_jump_cuts,
-            transition_sfx=s.transition_sfx, reframe=s.reframe, crf=s.crf, preset=s.preset,
+            transition_sfx=s.transition_sfx, reframe=s.reframe, rotate=self.rotation, crf=s.crf, preset=s.preset,
             loudness_lufs=s.loudness_lufs, meta={"transcript": str(self.transcript_path.resolve()),
                                                  "format": s.format, "template": s.caption_template},
         )

@@ -45,6 +45,7 @@ class Settings:
     hook_title: bool = True
     chapter_titles: bool = True
     reframe: str = "face"                    # face | blur | center (shorts only)
+    rotate: str = "auto"                     # auto | 0 | 90 | 180 | 270 (clockwise) – fixes sideways footage
     zoom_on_jump_cuts: bool = True
     emphasis_zoom: bool = True
     transitions: bool = True

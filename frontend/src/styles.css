@@ -24,6 +24,7 @@ h3 { font-size: 15px; margin: 0; }
 .block { display: block; }
 .accent { color: var(--accent); }
 .error { color: var(--err); font-size: 14px; }
+.notice { color: #f3e6a6; background: #2a2410; border: 1px solid #3d3415; border-radius: 9px; padding: 8px 12px; margin: 10px 0 0; }
 .lead { color: var(--muted); font-size: 17px; max-width: 680px; margin: 0 0 28px; }
 
 /* layout */

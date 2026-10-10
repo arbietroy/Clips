@@ -68,6 +68,7 @@ export interface VideoInfo {
   width: number;
   height: number;
   url: string;
+  rotation?: number; // clockwise turn the server detected to make people upright
   clips?: ClipIdea[];
 }
 
@@ -124,6 +125,7 @@ export interface JobOptions {
   fillers?: boolean;
   aggressive?: boolean;
   reframe?: string;
+  rotate?: string;
   whisper?: string;
 }
 

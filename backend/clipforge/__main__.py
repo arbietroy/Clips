@@ -31,6 +31,7 @@ def _settings(args) -> Settings:
     s.remove_repetition = not args.keep_fillers
     s.aggressive_fillers = args.aggressive
     s.reframe = args.reframe
+    s.rotate = args.rotate
     s.music_dir = Path(args.music_dir)
     s.broll_dir = Path(args.broll_dir)
     s.caption_template = args.template
@@ -63,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--aggressive", action="store_true", help='also cut "you know", "I mean", "like,"')
         sp.add_argument("--reframe", choices=["face", "blur", "center"], default="face",
                         help="how to turn landscape footage vertical for shorts")
+        sp.add_argument("--rotate", choices=["auto", "0", "90", "180", "270"], default="auto",
+                        help="turn sideways footage upright (clockwise degrees); auto detects it from faces")
         sp.add_argument("--music-dir", default="music")
         sp.add_argument("--broll-dir", default="broll")
         sp.add_argument("--format", default="vertical", choices=list(FORMATS),

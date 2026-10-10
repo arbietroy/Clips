@@ -32,6 +32,7 @@ from clipforge.config import MOODS, Settings
 from clipforge.formats import FORMATS
 from clipforge.log import Log
 from clipforge.media import probe
+from clipforge.reframe import detect_rotation
 from clipforge.templates import TEMPLATES
 
 HERE = Path(__file__).resolve().parent
@@ -85,6 +86,7 @@ class JobOptions(BaseModel):
     fillers: bool = True
     aggressive: bool = False
     reframe: str = "face"
+    rotate: str = "auto"                  # auto | 0 | 90 | 180 | 270 (clockwise)
     whisper: str = os.environ.get("WHISPER_MODEL", "small")
     language: str | None = None
 
@@ -117,6 +119,7 @@ def build_settings(o: JobOptions) -> Settings:
     s.remove_fillers = s.remove_repetition = o.fillers
     s.aggressive_fillers = o.aggressive
     s.reframe = o.reframe if o.reframe in ("face", "blur", "center") else "face"
+    s.rotate = o.rotate if o.rotate in ("auto", "0", "90", "180", "270") else "auto"
     s.whisper_model = o.whisper if o.whisper in ("tiny", "base", "small", "medium", "large-v3") else "small"
     s.language = o.language
     s.music_dir = HERE / "music"
@@ -238,8 +241,12 @@ async def upload_video(file: UploadFile = File(...)) -> dict:
         raise HTTPException(400, f"Could not read this video: {e}")
     if not info.has_audio:
         raise HTTPException(400, "This video has no audio track. Clips edits from the speech.")
+    # Spot footage saved sideways now, so the UI can say so before anything is rendered.
+    rotation = detect_rotation(dest)
+    (vdir / "project").mkdir(exist_ok=True)
+    (vdir / "project" / "rotation.json").write_text(json.dumps({"auto": rotation}))
     meta = {"id": vid, "name": file.filename, "duration": info.duration, "width": info.width,
-            "height": info.height, "fps": info.fps, "created": time.time()}
+            "height": info.height, "fps": info.fps, "rotation": rotation, "created": time.time()}
     (vdir / "info.json").write_text(json.dumps(meta))
     return meta | {"url": f"/api/videos/{vid}/source"}
 

@@ -13,7 +13,7 @@ export default function ClipFinder() {
   const [video, setVideo] = useState<VideoInfo | null>(null);
   const [numClips, setNumClips] = useState(5);
   const [length, setLength] = useState(60);
-  const [format, setFormat] = useState<FormatValue>({ format: "vertical", reframe: "face" });
+  const [format, setFormat] = useState<FormatValue>({ format: "vertical", reframe: "face", rotate: "auto" });
   const [asking, setAsking] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +57,9 @@ export default function ClipFinder() {
             <p className="meta">
               {video.name} · {fmtTime(video.duration)} · {video.width}×{video.height}
             </p>
+            {!!video.rotation && (
+              <p className="notice small">Looks sideways: it will be turned upright when exported.</p>
+            )}
             {!running && (
               <button className="link" onClick={() => (setVideo(null), setJobId(null))}>
                 Use a different video

@@ -36,6 +36,7 @@ class EditPlan:
     fps: int
     transitions: list[dict] = field(default_factory=list)   # {"after": seg index, "type", "duration"}
     reframe: str = "none"                       # face | blur | center | none
+    rotate: int = 0                             # clockwise degrees applied to the source (0/90/180/270)
     hook_text: str | None = None
     chapters: list[dict] = field(default_factory=list)      # {"time": src seconds, "title"}
     broll: list[dict] = field(default_factory=list)         # {"start", "end" (src), "query", "file"}
@@ -67,7 +68,11 @@ def _select_expr(ranges: list[tuple[float, float]], eps: float) -> str:
     return "+".join(f"gte(t,{a - eps:.4f})*lt(t,{b - eps:.4f})" for a, b in ranges)
 
 
-def _render_group(src: Path, ranges: list[tuple[float, float]], fps: int, out: Path, work: Path, log) -> None:
+ROTATE_FILTERS = {90: "transpose=clock,", 180: "hflip,vflip,", 270: "transpose=cclock,"}
+
+
+def _render_group(src: Path, ranges: list[tuple[float, float]], fps: int, out: Path, work: Path, log,
+                  rotate: int = 0) -> None:
     seek = max(0.0, ranges[0][0] - 1.0)
     rel = [(a - seek, b - seek) for a, b in ranges]
     end = rel[-1][1] + 0.5
@@ -75,7 +80,7 @@ def _render_group(src: Path, ranges: list[tuple[float, float]], fps: int, out: P
     # Audio is regrouped into one-video-frame packets so audio and video select identical spans.
     script = work / f"{out.stem}.filter"
     script.write_text(
-        f"[0:v]fps={fps},select='{_select_expr(rel, eps)}',setpts=N/FRAME_RATE/TB,setsar=1,format=yuv420p[v];\n"
+        f"[0:v]{ROTATE_FILTERS.get(rotate, '')}fps={fps},select='{_select_expr(rel, eps)}',setpts=N/FRAME_RATE/TB,setsar=1,format=yuv420p[v];\n"
         f"[0:a]aresample={SAMPLE_RATE}:async=1:first_pts=0,aformat=channel_layouts=stereo,"
         f"asetnsamples=n={SAMPLE_RATE // fps}:p=0,aselect='{_select_expr(rel, eps)}',asetpts=N/SR/TB[a]"
     )
@@ -99,7 +104,7 @@ def render_cut(plan: EditPlan, tl: Timeline, out: Path, work: Path, log) -> list
     files, lengths = [], []
     for gi, g in enumerate(groups):
         f = work / f"{plan.name}_g{gi:03d}.mkv"
-        _render_group(Path(plan.source), [segs[i] for i in g], plan.fps, f, work, log)
+        _render_group(Path(plan.source), [segs[i] for i in g], plan.fps, f, work, log, plan.rotate)
         files.append(f)
         lengths.append(sum(segs[i][1] - segs[i][0] for i in g))
         log.progress((gi + 1) / len(groups) * 0.5, f"{plan.name}: cutting {gi + 1}/{len(groups)}")

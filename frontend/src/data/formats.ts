@@ -21,6 +21,25 @@ export const FORMATS: Format[] = [
 
 export type Reframe = "face" | "blur" | "center";
 
+export type Rotate = "auto" | "0" | "90" | "180" | "270";
+
+export const ROTATIONS: { id: Rotate; label: string }[] = [
+  { id: "auto", label: "Auto-detect" },
+  { id: "0", label: "None" },
+  { id: "90", label: "Turn right ↻" },
+  { id: "270", label: "Turn left ↺" },
+  { id: "180", label: "Upside down" },
+];
+
+/** Clockwise degrees that will actually be applied for a choice. */
+export function effectiveRotation(choice: Rotate, detected = 0): number {
+  return choice === "auto" ? detected : Number(choice);
+}
+
+export function rotationLabel(deg: number) {
+  return deg === 90 ? "turned right" : deg === 270 ? "turned left" : deg === 180 ? "flipped upright" : "";
+}
+
 export const REFRAMES: { id: Reframe; label: string; hint: string }[] = [
   { id: "face", label: "Follow the speaker", hint: "Crops around the face in every shot" },
   { id: "blur", label: "Fit with blur", hint: "Whole frame over a blurred background" },
