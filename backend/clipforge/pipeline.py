@@ -320,6 +320,38 @@ class Project:
                 f"_{self._size_tag()}_{self.settings.caption_template}")
         return self.render_plans([self.plan_edit(max(0.0, start), min(end, dur), name, clip)])
 
+    def manual_edit(self, start: float | None, end: float | None, cut_words: set[int], broll: list[dict],
+                    title: str | None = None, hook_text: str | None = None) -> list[dict]:
+        """Manual editor: render exactly the words the person kept, with the b-roll they placed."""
+        s = self.settings
+        tr = self.transcript()
+        a = self.analysis(reuse=True)
+        start = 0.0 if start is None else max(0.0, start)
+        end = tr.duration if end is None else min(end, tr.duration)
+        full = start <= 0.5 and end >= tr.duration - 0.5
+        segs = keep_segments(tr.words, start, end, set(cut_words), [], s.max_pause, s.pause_padding)
+        name = f"manual_{int(start)}-{int(end)}_{self._size_tag()}_{s.caption_template}_{time.strftime('%H%M%S')}"
+        plan = self._base(name, "manual", [list(x) for x in segs])
+        plan.zoom_on_jump_cuts = s.zoom_on_jump_cuts and len(segs) <= 400
+        plan.emphasis = [t for t in a.emphasis if start <= t <= end] if s.emphasis_zoom else []
+        if s.broll:
+            orientation = self._orientation(plan)
+            for b in broll:
+                f = find_broll(b["label"], s.broll_dir, self.dir.parent / "_broll_cache", orientation,
+                               b["end"] - b["start"], self._used_broll, self.log,
+                               pexels_key=s.pexels_api_key, pixabay_key=s.pixabay_api_key)
+                if f:
+                    self._used_broll.add(str(f))
+                    plan.broll.append({"start": b["start"], "end": b["end"], "query": b["label"],
+                                       "file": str(Path(f).resolve())})
+        mood = s.music_mood or a.music_mood
+        plan.music = self._music(mood, name, s.music_volume * (0.6 if full else 1.0))
+        plan.hook_text = hook_text if (hook_text and s.hook_title) else None
+        plan.meta.update({"title": title or ("Manual edit" if full else "Manual edit of a clip"),
+                          "source_range": [start, end], "cut_words": sorted(cut_words),
+                          "broll_plan": broll, "manual": True})
+        return self.render_plans([plan])
+
     def run(self, shorts: bool = True, long: bool = True, only_clip: int | None = None) -> list[dict]:
         """CLI: auto-edit every clip and/or the whole video."""
         plans = []

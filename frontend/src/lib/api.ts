@@ -86,7 +86,7 @@ export interface ClipIdea {
 
 export interface Output {
   name: string;
-  kind: "raw" | "clip" | "full";
+  kind: "raw" | "clip" | "full" | "manual";
   file: string;
   srt: string;
   plan: string;
@@ -155,7 +155,7 @@ export interface JobOptions {
 
 export interface Job {
   id: string;
-  type: "analyze" | "find_clips" | "auto_edit";
+  type: "analyze" | "find_clips" | "auto_edit" | "manual";
   video_id: string;
   status: "queued" | "running" | "done" | "error";
   phase: "transcribing" | "analyzing" | "rendering" | null;
@@ -183,6 +183,10 @@ export const createJob = (body: {
   range?: [number, number] | null;
   clips?: ClipIdea[];
   replaces?: string;
+  cut_words?: number[];
+  broll?: EditorBroll[];
+  title?: string;
+  hook_text?: string;
   options: JobOptions;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
@@ -213,3 +217,41 @@ export function upload<T>(path: string, file: File, onProgress: (frac: number) =
 
 export const uploadVideo = (f: File, p: (n: number) => void) => upload<VideoInfo>("/api/videos", f, p);
 export const uploadAudio = (f: File, p: (n: number) => void) => upload<{ id: string; name: string }>("/api/audio", f, p);
+
+// ---------------------------------------------------------------- manual editor
+
+export interface EditorWord {
+  i: number; // index in the full transcript
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface EditorBroll {
+  start: number;
+  end: number;
+  label: string; // what to show (a topic like "voting", or any search words)
+}
+
+export interface EditorData extends ProjectSummary {
+  needs_transcript?: boolean;
+  range: [number, number];
+  words: EditorWord[];
+  sentences: [number, number][];
+  auto_cut: number[];
+  cut: number[] | null; // from a previous edit
+  broll: EditorBroll[];
+  settings: JobOptions;
+  title?: string | null;
+  language?: string | null;
+  padding: number;
+  max_pause: number;
+}
+
+export function getEditor(id: string, p: { start?: string | null; end?: string | null; source?: string | null }) {
+  const q = new URLSearchParams();
+  if (p.start) q.set("start", p.start);
+  if (p.end) q.set("end", p.end);
+  if (p.source) q.set("source", p.source);
+  return request<EditorData>(`/api/projects/${id}/editor?${q}`);
+}

@@ -192,6 +192,7 @@ export default function ProjectPage() {
           </p>
         </div>
         <div className="row gap wrap">
+          <button className="btn ghost" onClick={() => navigate(`/editor/${id}`)}>✂ Edit manually</button>
           <button className="btn ghost" onClick={() => navigate(`/auto?video=${id}`)}>✦ Auto-edit the whole video</button>
           <button className="btn ghost danger" disabled={!!running} onClick={remove}>Delete</button>
         </div>
@@ -261,6 +262,7 @@ export default function ProjectPage() {
                   }
                   onChange={(nc) => setDraft((d) => ({ ...d, trims: { ...d.trims, [key]: [nc.start, nc.end] } }))}
                   onAutoEdit={() => autoEdit(c.start, c.end)}
+                  onManual={() => navigate(`/editor/${id}?start=${c.start}&end=${c.end}`)}
                 />
               );
             })}
@@ -326,14 +328,31 @@ export default function ProjectPage() {
                 actions={
                   o.kind === "raw" ? (
                     o.source_range && (
-                      <button className="btn small" onClick={() => autoEdit(o.source_range![0], o.source_range![1])}>
-                        ✦ Auto-edit this clip
-                      </button>
+                      <>
+                        <button className="btn small" onClick={() => autoEdit(o.source_range![0], o.source_range![1])}>
+                          ✦ Auto-edit this clip
+                        </button>
+                        <button
+                          className="btn small ghost"
+                          onClick={() => navigate(`/editor/${id}?start=${o.source_range![0]}&end=${o.source_range![1]}`)}
+                        >
+                          ✂ Edit manually
+                        </button>
+                      </>
                     )
-                  ) : (
-                    <button className="btn small" onClick={() => editAgain(o)}>
-                      ✦ Edit again
+                  ) : o.kind === "manual" ? (
+                    <button className="btn small" onClick={() => navigate(`/editor/${id}?source=${encodeURIComponent(o.name)}`)}>
+                      ✂ Edit again
                     </button>
+                  ) : (
+                    <>
+                      <button className="btn small" onClick={() => editAgain(o)}>
+                        ✦ Edit again
+                      </button>
+                      <button className="btn small ghost" onClick={() => navigate(`/editor/${id}?source=${encodeURIComponent(o.name)}`)}>
+                        ✂ Fine-tune manually
+                      </button>
+                    </>
                   )
                 }
               />

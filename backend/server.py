@@ -28,7 +28,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from clipforge.analyze import ClipIdea
+from clipforge.analyze import Analysis, ClipIdea, heuristic_broll
+from clipforge.cleanup import find_removals
 from clipforge.assets import AUDIO_EXT, VIDEO_EXT
 from clipforge.config import MOODS, Settings
 from clipforge.formats import FORMATS
@@ -125,12 +126,22 @@ class ClipIn(BaseModel):
     music_mood: str = "upbeat"
 
 
+class BrollIn(BaseModel):
+    start: float
+    end: float
+    label: str
+
+
 class JobRequest(BaseModel):
-    type: str                             # "analyze" | "find_clips" | "auto_edit"
+    type: str                             # "analyze" | "find_clips" | "auto_edit" | "manual"
     video_id: str
     range: list[float] | None = None      # auto_edit only: [start, end] in source seconds
     clips: list[ClipIn] | None = None     # find_clips only: the clips to export (default: all found)
     replaces: str | None = None           # auto_edit only: an older render this one supersedes (deleted on success)
+    cut_words: list[int] | None = None    # manual only: transcript word indices to cut
+    broll: list[BrollIn] | None = None    # manual only: b-roll placed in the editor (source times)
+    title: str | None = None              # manual only
+    hook_text: str | None = None          # manual only
     options: JobOptions = JobOptions()
 
 
@@ -205,6 +216,10 @@ def _worker() -> None:
             elif req.type == "find_clips":
                 chosen = [ClipIdea(**c.model_dump()) for c in req.clips] if req.clips else None
                 outputs = project.find_clips(chosen)
+            elif req.type == "manual":
+                rng = req.range if req.range and len(req.range) == 2 else [None, None]
+                outputs = project.manual_edit(rng[0], rng[1], set(req.cut_words or []),
+                                              [b.model_dump() for b in req.broll or []], req.title, req.hook_text)
             else:
                 rng = req.range if req.range and len(req.range) == 2 else [None, None]
                 outputs = project.auto_edit(*rng)
@@ -401,7 +416,7 @@ def _project_summary(vdir: Path) -> dict | None:
               if j["request"].video_id == meta["id"] and j["status"] in ("queued", "running")]
     return _video_public(meta) | {
         "clips_found": clips, "exports": sum(1 for p in outputs if p.name.startswith("clip_")),
-        "edits": sum(1 for p in outputs if p.name.startswith(("edit_", "full_edit"))),
+        "edits": sum(1 for p in outputs if p.name.startswith(("edit_", "full_edit", "manual_"))),
         "updated": max(times), "active_jobs": active,
     }
 
@@ -463,6 +478,80 @@ def _purge_deleted() -> None:
             _remove_tree(d, attempts=1)
 
 
+@app.get("/api/projects/{video_id}/editor")
+def editor_data(video_id: str, start: float | None = None, end: float | None = None,
+                source: str | None = None) -> dict:
+    """Everything the manual editor needs: words with timings, suggested cuts and b-roll, or the state
+    of a previous edit (``source`` = its output name) to continue from."""
+    vdir = VIDEOS / _safe_id(video_id)
+    summary = _project_summary(vdir)
+    if not summary:
+        raise HTTPException(404, "Project not found")
+    proj = vdir / "project"
+    if not (proj / "transcript.json").exists() or _transcript_language(proj) is None:
+        return summary | {"needs_transcript": True}
+    tr = Transcript.load(proj / "transcript.json")
+    defaults = Settings()
+    settings: dict = {}
+    cut: set[int] | None = None
+    broll: list[dict] | None = None
+    title = None
+    if source:
+        plan_file = proj / f"{Path(source).name}.plan.json"
+        if plan_file.exists():
+            plan = json.loads(plan_file.read_text())
+            meta = plan.get("meta", {})
+            title = meta.get("title")
+            settings = meta.get("options") or {"template": meta.get("template"), "format": meta.get("format")}
+            if meta.get("source_range"):
+                start, end = meta["source_range"]
+            elif plan.get("kind") == "full":
+                start, end = 0.0, tr.duration
+            else:
+                segs = plan.get("segments") or []
+                start, end = (segs[0][0], segs[-1][1]) if segs else (start, end)
+            if meta.get("cut_words") is not None:
+                cut = set(meta["cut_words"])
+            else:   # an automatic edit: everything outside its kept segments counts as cut
+                segs = plan.get("segments") or []
+                cut = {i for i, w in enumerate(tr.words)
+                       if not any(a - 0.05 <= (w.start + w.end) / 2 <= b + 0.05 for a, b in segs)}
+            broll = meta.get("broll_plan") or [{"start": b["start"], "end": b["end"], "label": b["query"]}
+                                               for b in plan.get("broll", [])]
+    start = 0.0 if start is None else max(0.0, start)
+    end = tr.duration if end is None else min(end, tr.duration)
+    idx = [i for i, w in enumerate(tr.words) if w.start >= start - 0.05 and w.end <= end + 0.05]
+    auto = find_removals(tr.words, defaults.remove_fillers, defaults.remove_repetition,
+                         defaults.aggressive_fillers, defaults.remove_retakes)
+    if broll is None:
+        analysis = proj / "analysis.json"
+        a = Analysis.from_dict(json.loads(analysis.read_text())) if analysis.exists() else None
+        ideas = a.broll if a and a.source != "heuristic" else heuristic_broll(tr, defaults)[0]
+        broll = [{"start": b.start, "end": b.end, "label": b.query} for b in ideas if start <= b.start and b.end <= end]
+    # sentences (for "cut this sentence")
+    sentences, cur = [], []
+    for i in idx:
+        if cur and (tr.words[cur[-1]].text.rstrip().endswith((".", "!", "?")) or tr.words[i].start - tr.words[cur[-1]].end > 1.0):
+            sentences.append([cur[0], cur[-1]])
+            cur = []
+        cur.append(i)
+    if cur:
+        sentences.append([cur[0], cur[-1]])
+    return summary | {
+        "range": [start, end],
+        "words": [{"i": i, "start": tr.words[i].start, "end": tr.words[i].end, "text": tr.words[i].text} for i in idx],
+        "sentences": sentences,
+        "auto_cut": sorted(i for i in auto if i in set(idx)),
+        "cut": sorted(cut & set(idx)) if cut is not None else None,
+        "broll": broll,
+        "settings": settings,
+        "title": title,
+        "language": _transcript_language(proj),
+        "padding": defaults.pause_padding,
+        "max_pause": defaults.max_pause,
+    }
+
+
 @app.delete("/api/projects/{video_id}", dependencies=[Depends(check_access)])
 def delete_project(video_id: str) -> dict:
     vdir = VIDEOS / _safe_id(video_id)
@@ -500,8 +589,8 @@ async def upload_audio(file: UploadFile = File(...)) -> dict:
 
 @app.post("/api/jobs", dependencies=[Depends(check_access)])
 def create_job(req: JobRequest) -> dict:
-    if req.type not in ("analyze", "find_clips", "auto_edit"):
-        raise HTTPException(400, "type must be analyze, find_clips or auto_edit")
+    if req.type not in ("analyze", "find_clips", "auto_edit", "manual"):
+        raise HTTPException(400, "type must be analyze, find_clips, auto_edit or manual")
     if not (VIDEOS / _safe_id(req.video_id) / "info.json").exists():
         raise HTTPException(404, "Unknown video")
     job_id = uuid.uuid4().hex[:12]

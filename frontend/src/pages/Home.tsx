@@ -32,12 +32,10 @@ export default function Home() {
           <h3>Auto Editor</h3>
           <p>Edits a full video or any clip: removes ums and repeats, adds animated captions, b-roll, music, transitions and zooms.</p>
         </Link>
-        <Link to="/editor" className="tool muted-tool">
+        <Link to="/editor" className="tool">
           <span className="tool-icon">▤</span>
-          <h3>
-            Manual Editor <span className="soon">coming soon</span>
-          </h3>
-          <p>A full timeline editor: keyframes, volume, masks, text, filters. Open any automatic edit here to fine-tune it.</p>
+          <h3>Manual Editor</h3>
+          <p>Edit by text: cut any word or sentence from the transcript, place your own b-roll, pick captions and music, then export.</p>
         </Link>
       </section>
 

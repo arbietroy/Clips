@@ -17,9 +17,7 @@ export default function Layout() {
           <NavLink to="/projects">My Projects</NavLink>
           <NavLink to="/find">Clip Finder</NavLink>
           <NavLink to="/auto">Auto Editor</NavLink>
-          <NavLink to="/editor">
-            Manual Editor <span className="soon">soon</span>
-          </NavLink>
+          <NavLink to="/editor">Manual Editor</NavLink>
         </nav>
         <button className={`server-pill ${status}`} onClick={() => setOpen(true)} title="AI server settings">
           <span className="dot" />

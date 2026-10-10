@@ -19,6 +19,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="find" element={<ClipFinder />} />
           <Route path="auto" element={<AutoEditor />} />
           <Route path="editor" element={<ManualEditor />} />
+          <Route path="editor/:id" element={<ManualEditor />} />
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectPage />} />
         </Route>

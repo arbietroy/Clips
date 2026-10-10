@@ -10,7 +10,7 @@ Turn long videos into viral short clips and edit them automatically.
 | **Sideways footage** | ✅ Built | Portrait videos saved sideways are detected from the faces in them and turned upright automatically (or choose the rotation yourself in the export window). |
 | **My Projects** | ✅ Built | Every uploaded video is a project that keeps its suggested clips (with your trims), every export and every edit, so you can come back to any of them later. |
 | **Retakes & silences** | ✅ Built | Without AI: false starts and repeated lines ("So today I want to… so today I want to talk about…") are detected from the transcript and cut, along with ums, stutters and long pauses. Optional "Clean up" for Clip Finder exports too. |
-| **Manual Editor** | 🔜 Next | A CapCut-style timeline: keyframes, volume, masks, text, filters. Automatic edits will open here so you can fine-tune them. |
+| **Manual Editor** | ✅ First version | Edit by text: the transcript with suggested cuts pre-marked; select words and press Delete (or ✂ a sentence) to cut, and the preview skips the cuts with the edited length shown live. B-roll track (add / change / delete), captions template, music, zoom, export in any size. Any auto-edit can be fine-tuned here. Keyframes, masks and multi-track overlays come next. |
 
 ```
 frontend/   React + TypeScript (Vite): the website

@@ -14,10 +14,11 @@ interface Props {
   onToggle: () => void;
   onChange: (c: ClipIdea) => void;
   onAutoEdit: () => void;
+  onManual?: () => void;
 }
 
 /** Plays a suggested clip straight from the source video, so nothing is rendered until it's chosen. */
-export default function ClipPreview({ video, clip, original, index, selected, onToggle, onChange, onAutoEdit }: Props) {
+export default function ClipPreview({ video, clip, original, index, selected, onToggle, onChange, onAutoEdit, onManual }: Props) {
   const ref = useRef<HTMLVideoElement>(null);
   const [t, setT] = useState(clip.start);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -136,6 +137,7 @@ export default function ClipPreview({ video, clip, original, index, selected, on
         <div className="card-actions">
           <button className="btn small ghost" onClick={toggle}>{isPlaying ? "❚❚ Pause" : "▶ Preview"}</button>
           <button className="btn small" onClick={onAutoEdit}>✦ Auto-edit</button>
+          {onManual && <button className="btn small ghost" onClick={onManual}>✂ Edit</button>}
         </div>
       </div>
     </div>
