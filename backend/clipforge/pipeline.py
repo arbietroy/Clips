@@ -19,6 +19,11 @@ from .render import EditPlan, render
 from .transcript import LANGUAGE_NAMES, Transcript, transcribe
 
 
+# Bump when editing improves in a way that should be offered as an update for older renders.
+# 3: English by default, called-off takes cut, topic-aware b-roll.
+ENGINE_VERSION = 3
+
+
 def slugify(text: str, max_len: int = 40) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return s[:max_len].strip("-") or "clip"
@@ -272,7 +277,7 @@ class Project:
                 "hook_text": plan.hook_text or plan.meta.get("hook_text"),
                 "music": plan.music and Path(plan.music["file"]).name,
                 "broll": [b["query"] for b in plan.broll], "cuts": len(plan.segments) - 1,
-                "created": time.time(),
+                "created": time.time(), "engine": ENGINE_VERSION,
             }
             (self.dir / f"{plan.name}.result.json").write_text(json.dumps(result, indent=2))
             results.append(result)

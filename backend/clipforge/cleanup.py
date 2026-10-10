@@ -67,11 +67,16 @@ RETAKE_CUES = [
     "one more time", "take two", "take 2", "from the top", "scratch that", "cut cut", "cut that",
     "i messed up", "i messed that up", "i made a mistake", "oh my god stop", "oh my gosh stop",
     "wait wait", "hold on hold on", "sorry sorry", "sorry again", "no no no", "stop stop",
+    "i dont want to say that", "i dont want to say it like that", "i shouldnt say that", "dont put that",
+    "dont use that", "dont use this", "edit that out", "edit this out", "cut that out", "cut this out",
+    "cut this part", "remove that part", "lets not say that", "forget that", "forget i said that",
+    "that came out wrong", "thats not what i meant", "let me fix that", "let me correct that", "oh stop",
 ]
 # These also occur in normal speech ("we will start again next year"), so they only count as a cue
 # when they open a phrase.
 _AMBIGUOUS_CUES = {("start", "again"), ("start", "over"), ("one", "more", "time"), ("from", "the", "top"),
-                   ("take", "two"), ("take", "2"), ("cut", "that"), ("no", "no", "no")}
+                   ("take", "two"), ("take", "2"), ("cut", "that"), ("no", "no", "no"), ("forget", "that"),
+                   ("oh", "stop")}
 _CUES = sorted((tuple(c.split()) for c in RETAKE_CUES), key=len, reverse=True)
 _SOFT_LEADS = {"oh", "my", "god", "gosh", "okay", "ok", "sorry", "wait", "no", "stop", "hold", "on", "so",
                "alright", "right", "um", "uh", "hmm", "ah", "jeez", "damn", "shoot", "cut"}

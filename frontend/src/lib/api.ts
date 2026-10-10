@@ -107,6 +107,7 @@ export interface Output {
   cleaned?: boolean;
   created?: number;
   options?: JobOptions | null; // the settings it was made with (for "Edit again")
+  outdated?: boolean; // made before the latest fixes; can be updated in one click
   error?: string;
 }
 
@@ -181,6 +182,7 @@ export const createJob = (body: {
   video_id: string;
   range?: [number, number] | null;
   clips?: ClipIdea[];
+  replaces?: string;
   options: JobOptions;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 

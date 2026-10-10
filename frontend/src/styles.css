@@ -249,3 +249,5 @@ input[type="color"] { padding: 2px; width: 44px; height: 36px; }
 .reedit p { margin: 4px 0 0; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
+.outdated { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: space-between; background: #2a2410; border: 1px solid #3d3415; color: #f3e6a6; border-radius: 9px; padding: 8px 10px; margin-top: 4px; }
+.outdated.wide-note { margin-bottom: 16px; font-size: 14px; }

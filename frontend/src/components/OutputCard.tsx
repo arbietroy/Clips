@@ -4,7 +4,13 @@ import { FORMATS } from "../data/formats";
 import { TEMPLATES } from "../data/templates";
 import { fmtTime } from "../lib/hooks";
 
-export default function OutputCard({ o, actions, wide }: { o: Output; actions?: ReactNode; wide?: boolean }) {
+export default function OutputCard({ o, actions, wide, onUpdate, updating }: {
+  o: Output;
+  actions?: ReactNode;
+  wide?: boolean;
+  onUpdate?: () => void;
+  updating?: boolean;
+}) {
   if (o.error) {
     return (
       <div className="card">
@@ -51,6 +57,14 @@ export default function OutputCard({ o, actions, wide }: { o: Output; actions?: 
             </a>
           )}
         </div>
+        {o.outdated && onUpdate && (
+          <div className="outdated">
+            <span className="small">Made with an older version: no English-only subtitles or retake cutting yet.</span>
+            <button className="btn small" disabled={updating} onClick={onUpdate}>
+              {updating ? "Updating…" : "↻ Update with latest fixes"}
+            </button>
+          </div>
+        )}
         {actions && <div className="card-actions">{actions}</div>}
       </div>
     </div>

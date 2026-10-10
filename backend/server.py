@@ -34,7 +34,7 @@ from clipforge.config import MOODS, Settings
 from clipforge.formats import FORMATS
 from clipforge.log import Log
 from clipforge.media import probe, run_ffmpeg
-from clipforge.pipeline import list_outputs
+from clipforge.pipeline import ENGINE_VERSION, list_outputs
 from clipforge.render import ROTATE_FILTERS
 from clipforge.transcript import LANGUAGE_NAMES, Transcript
 from clipforge.reframe import detect_rotation
@@ -130,6 +130,7 @@ class JobRequest(BaseModel):
     video_id: str
     range: list[float] | None = None      # auto_edit only: [start, end] in source seconds
     clips: list[ClipIn] | None = None     # find_clips only: the clips to export (default: all found)
+    replaces: str | None = None           # auto_edit only: an older render this one supersedes (deleted on success)
     options: JobOptions = JobOptions()
 
 
@@ -208,6 +209,8 @@ def _worker() -> None:
                 rng = req.range if req.range and len(req.range) == 2 else [None, None]
                 outputs = project.auto_edit(*rng)
             job["outputs"] = [_public_output(req.video_id, o) for o in outputs]
+            if req.replaces and outputs and not any(o.get("error") for o in outputs):
+                _delete_output(vdir / "project", req.replaces, keep={o["name"] for o in outputs})
             failed = [o for o in outputs if o.get("error")]
             job["status"] = "error" if failed and len(failed) == len(outputs) else "done"
             if req.type == "analyze" and not analysis.clips:
@@ -222,6 +225,24 @@ def _worker() -> None:
 
 
 threading.Thread(target=_worker, daemon=True).start()
+
+
+def _delete_output(proj: Path, name: str, keep: set[str]) -> None:
+    """Remove an older render and its side files (when it was replaced by an updated one)."""
+    if name in keep or "/" in name or "\\" in name or name.startswith("."):
+        return
+    for suffix in (".mp4", ".srt", ".plan.json", ".result.json"):
+        (proj / f"{name}{suffix}").unlink(missing_ok=True)
+
+
+def _is_outdated(proj: Path, o: dict) -> bool:
+    """An edit made before the latest fixes, or with an older transcript, can be updated in one click."""
+    if o.get("kind") == "raw":
+        return False
+    if o.get("engine", 0) < ENGINE_VERSION:
+        return True
+    transcript = proj / "transcript.json"
+    return transcript.exists() and transcript.stat().st_mtime > o.get("created", 0) + 1
 
 
 def _transcript_language(proj: Path) -> str | None:
@@ -403,7 +424,8 @@ def get_project(video_id: str) -> dict:
             tr = Transcript.load(proj / "transcript.json")
             clips = [c | {"text": tr.text_between(c["start"], c["end"])} for c in clips]
         clips.sort(key=lambda c: -c.get("virality_score", 0))
-    outputs = [_public_output(video_id, o) for o in list_outputs(proj)] if proj.exists() else []
+    outputs = ([_public_output(video_id, o) | {"outdated": _is_outdated(proj, o)} for o in list_outputs(proj)]
+               if proj.exists() else [])
     return summary | {"clips": clips, "outputs": outputs, "language": _transcript_language(proj) or "en"}
 
 

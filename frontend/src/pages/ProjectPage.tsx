@@ -121,6 +121,28 @@ export default function ProjectPage() {
   const autoEdit = (start: number, end: number) =>
     navigate(`/auto?video=${id}&start=${start}&end=${end}&format=${format.format}`);
 
+  // Re-render an older edit with the same settings and the latest fixes; it replaces the old version.
+  const updateOutputs = async (list: Output[]) => {
+    setError(null);
+    try {
+      let last: string | null = null;
+      for (const o of list) {
+        const opts = o.options ?? { template: o.template, format: o.format };
+        const j = await createJob({
+          type: "auto_edit",
+          video_id: id,
+          range: o.kind === "full" ? null : (o.source_range ?? null),
+          options: { ...opts, language: project?.language || "en" },
+          replaces: o.name,
+        });
+        last = j.id;
+      }
+      if (last) setJobId(last);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
   const editAgain = (o: Output) => {
     const range = o.source_range ? `&start=${o.source_range[0]}&end=${o.source_range[1]}` : "";
     navigate(`/auto?video=${id}&from=${encodeURIComponent(o.name)}${range}`);
@@ -273,6 +295,17 @@ export default function ProjectPage() {
             </div>
           )}
         </div>
+        {project.outputs.filter((o) => o.outdated).length > 1 && (
+          <div className="outdated wide-note">
+            <span>
+              {project.outputs.filter((o) => o.outdated).length} edits were made with an older version (no English-only
+              subtitles or retake cutting).
+            </span>
+            <button className="btn small" disabled={!!running} onClick={() => updateOutputs(project.outputs.filter((o) => o.outdated))}>
+              ↻ Update all
+            </button>
+          </div>
+        )}
         {project.outputs.length === 0 ? (
           <p className="muted">Nothing exported yet. Tick the clips you like above and press Export, or auto-edit one.</p>
         ) : (
@@ -282,6 +315,8 @@ export default function ProjectPage() {
                 key={o.file}
                 o={o}
                 wide={o.width > o.height && o.kind === "full"}
+                onUpdate={() => updateOutputs([o])}
+                updating={!!running}
                 actions={
                   o.kind === "raw" ? (
                     o.source_range && (
