@@ -106,6 +106,7 @@ export interface Output {
   template?: string;
   cleaned?: boolean;
   created?: number;
+  options?: JobOptions | null; // the settings it was made with (for "Edit again")
   error?: string;
 }
 

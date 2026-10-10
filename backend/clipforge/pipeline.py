@@ -176,7 +176,8 @@ class Project:
             caption_highlight=s.caption_highlight, zoom_on_jump_cuts=s.zoom_on_jump_cuts,
             transition_sfx=s.transition_sfx, reframe=s.reframe, rotate=self.rotation, crf=s.crf, preset=s.preset,
             loudness_lufs=s.loudness_lufs, meta={"transcript": str(self.transcript_path.resolve()),
-                                                 "format": s.format, "template": s.caption_template},
+                                                 "format": s.format, "template": s.caption_template,
+                                                 "options": s.ui_options},
         )
 
     def _size_tag(self) -> str:

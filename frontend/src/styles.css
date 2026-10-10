@@ -243,3 +243,9 @@ input[type="color"] { padding: 2px; width: 44px; height: 36px; }
 .project-thumb .working { position: absolute; left: 8px; top: 8px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
 .empty { text-align: center; padding: 40px 20px; }
 .export-sticky .toggle { align-items: center; }
+
+.reedit { display: flex; gap: 16px; align-items: center; background: var(--panel); border: 1px solid #4a4320; border-radius: var(--radius); padding: 14px; margin-bottom: 20px; }
+.reedit video { width: 72px; max-height: 110px; object-fit: cover; border-radius: 8px; background: #000; flex: none; }
+.reedit p { margin: 4px 0 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }

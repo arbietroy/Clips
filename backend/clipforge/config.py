@@ -76,6 +76,9 @@ class Settings:
     preset: str = "veryfast"
     loudness_lufs: float = -14.0
 
+    # The choices made in the web app for this render, saved with it so "Edit again" can start from them.
+    ui_options: dict | None = None
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["pexels_api_key"] = bool(self.pexels_api_key)

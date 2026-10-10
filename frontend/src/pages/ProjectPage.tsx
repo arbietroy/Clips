@@ -121,6 +121,11 @@ export default function ProjectPage() {
   const autoEdit = (start: number, end: number) =>
     navigate(`/auto?video=${id}&start=${start}&end=${end}&format=${format.format}`);
 
+  const editAgain = (o: Output) => {
+    const range = o.source_range ? `&start=${o.source_range[0]}&end=${o.source_range[1]}` : "";
+    navigate(`/auto?video=${id}&from=${encodeURIComponent(o.name)}${range}`);
+  };
+
   const remove = async () => {
     if (!project || !confirm(`Delete “${project.name}” and everything made from it? This can't be undone.`)) return;
     try {
@@ -278,9 +283,15 @@ export default function ProjectPage() {
                 o={o}
                 wide={o.width > o.height && o.kind === "full"}
                 actions={
-                  o.source_range && (
-                    <button className="btn small" onClick={() => autoEdit(o.source_range![0], o.source_range![1])}>
-                      ✦ {o.kind === "raw" ? "Auto-edit this clip" : "Edit again"}
+                  o.kind === "raw" ? (
+                    o.source_range && (
+                      <button className="btn small" onClick={() => autoEdit(o.source_range![0], o.source_range![1])}>
+                        ✦ Auto-edit this clip
+                      </button>
+                    )
+                  ) : (
+                    <button className="btn small" onClick={() => editAgain(o)}>
+                      ✦ Edit again
                     </button>
                   )
                 }

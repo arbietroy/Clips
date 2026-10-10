@@ -159,6 +159,7 @@ def build_settings(o: JobOptions) -> Settings:
     s.rotate = o.rotate if o.rotate in ("auto", "0", "90", "180", "270") else "auto"
     s.whisper_model = o.whisper if o.whisper in ("tiny", "base", "small", "medium", "large-v3") else "small"
     s.language = None if o.language in (None, "", "auto") else o.language
+    s.ui_options = o.model_dump()
     s.music_dir = HERE / "music"
     s.broll_dir = HERE / "broll"
     return s

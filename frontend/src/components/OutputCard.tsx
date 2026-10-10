@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 import { apiUrl, Output } from "../lib/api";
+import { FORMATS } from "../data/formats";
+import { TEMPLATES } from "../data/templates";
 import { fmtTime } from "../lib/hooks";
 
 export default function OutputCard({ o, actions, wide }: { o: Output; actions?: ReactNode; wide?: boolean }) {
@@ -22,6 +24,13 @@ export default function OutputCard({ o, actions, wide }: { o: Output; actions?: 
       </div>
       <div className="card-body">
         <h3>{o.title || o.name}</h3>
+        {o.kind !== "raw" && (o.template || o.format) && (
+          <div className="tags">
+            {o.template && <span className="tag">{TEMPLATES.find((t) => t.id === o.template)?.name ?? o.template} captions</span>}
+            {o.format && <span className="tag">{FORMATS.find((f) => f.id === o.format)?.ratio ?? `${o.width}×${o.height}`}</span>}
+            {o.created && <span className="tag">{new Date(o.created * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</span>}
+          </div>
+        )}
         {o.hook_text && o.hook_text !== o.title && <p className="hook">“{o.hook_text}”</p>}
         {o.reason && <p className="muted small">{o.reason}</p>}
         {o.summary && <p className="muted small">{o.summary}</p>}

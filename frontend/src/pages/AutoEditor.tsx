@@ -9,7 +9,7 @@ import Toggle from "../components/Toggle";
 import UploadDrop from "../components/UploadDrop";
 import { FormatId } from "../data/formats";
 import { LANGUAGES, MOODS } from "../data/templates";
-import { apiUrl, createJob, getVideo, JobOptions, Output, uploadAudio, VideoInfo } from "../lib/api";
+import { apiUrl, createJob, getProject, getVideo, JobOptions, Output, uploadAudio, VideoInfo } from "../lib/api";
 import { fmtTime, rememberVideo, useJob } from "../lib/hooks";
 
 type Scope = "whole" | "range";
@@ -55,10 +55,41 @@ export default function AutoEditor() {
   const [error, setError] = useState<string | null>(null);
   const { job } = useJob(jobId);
 
-  // Arriving from the Clip Finder: ?video=…&start=…&end=…
+  // "Edit again": start from the settings a previous edit was made with.
+  const [reediting, setReediting] = useState<Output | null>(null);
+  const applyOptions = (o: Output) => {
+    const opt: JobOptions = o.options ?? {};
+    setTemplate(opt.template ?? o.template ?? "bold-pop");
+    setCaptions(opt.captions ?? true);
+    setCustomHighlight(!!opt.highlight);
+    if (opt.highlight) setHighlight(opt.highlight);
+    setHookTitle(opt.hook_title ?? true);
+    setChapterTitles(opt.chapter_titles ?? true);
+    setBroll(opt.broll ?? true);
+    setMusic(opt.music ?? true);
+    setMood(opt.music_mood ?? "auto");
+    setTrack(opt.music_id ? { id: opt.music_id, name: "the track you used last time" } : null);
+    setTransitions(opt.transitions ?? true);
+    setZoom(opt.zoom ?? true);
+    setFillers(opt.fillers ?? true);
+    setAggressive(opt.aggressive ?? false);
+    setRetakes(opt.retakes ?? true);
+    if (opt.language) setLanguage(opt.language);
+    setFormat({
+      format: ((opt.format ?? o.format) as FormatId) || "vertical",
+      custom_width: opt.custom_width,
+      custom_height: opt.custom_height,
+      reframe: (opt.reframe as FormatValue["reframe"]) ?? "face",
+      rotate: (opt.rotate as FormatValue["rotate"]) ?? "auto",
+    });
+  };
+
+  // Arriving from a project: ?video=…&start=…&end=… (a clip) and optionally &from=<previous edit>
   useEffect(() => {
     const id = params.get("video");
-    if (!id || video?.id === id) return;
+    if (!id) return;
+    const from = params.get("from");
+    if (video?.id === id && (!from || reediting?.name === from)) return;
     getVideo(id)
       .then((v) => {
         setVideo(v);
@@ -67,9 +98,24 @@ export default function AutoEditor() {
         if (s && e) {
           setScope("range");
           setRange([+s, +e]);
+        } else {
+          setScope("whole");
         }
       })
       .catch(() => setLoadError("That video isn't on the server any more. Please upload it again."));
+    if (from) {
+      getProject(id)
+        .then((p) => {
+          const prev = p.outputs.find((o) => o.name === from);
+          if (prev) {
+            setReediting(prev);
+            applyOptions(prev);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setReediting(null);
+    }
   }, [params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -156,6 +202,19 @@ export default function AutoEditor() {
         Edit a whole video or one clip automatically. Ums and repeats are cut, and captions, b-roll, music, transitions
         and zooms are added for you.
       </p>
+
+      {reediting && video && (
+        <div className="reedit">
+          <video src={apiUrl(reediting.file)} muted playsInline preload="metadata" />
+          <div>
+            <b>Editing again: {reediting.title || reediting.name}</b>
+            <p className="muted small">
+              Your previous settings are loaded below. Change anything you like and press <b>Edit &amp; export</b>. The new
+              version is made from the original footage, and the previous version stays in your project.
+            </p>
+          </div>
+        </div>
+      )}
 
       {!video ? (
         <>
