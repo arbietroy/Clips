@@ -44,6 +44,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* not JSON */
     }
+    // A bare "Not Found" means the server doesn't know this address at all: it is running older code.
+    if (res.status === 404 && detail === "Not Found")
+      detail = "The server is running an older version of Clips. Close the server window and run .\\start.ps1 again (after git pull).";
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return res.json();
