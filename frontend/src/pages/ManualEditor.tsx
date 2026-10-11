@@ -397,7 +397,10 @@ function Editor({ id }: { id: string }) {
         <p className="lead">
           “{data.name}” needs a transcript before you can edit it by text. This takes a few minutes the first time.
         </p>
-        {!prepJob && (
+        {prep?.status === "done" && (
+          <p className="error">The transcript finished but couldn't be opened. Click below to try again.</p>
+        )}
+        {(!prepJob || prep?.status === "done" || prep?.status === "error") && (
           <button
             className="btn big"
             onClick={async () => {

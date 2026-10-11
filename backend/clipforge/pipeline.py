@@ -93,6 +93,9 @@ class Project:
         elif self.transcript_path.exists() and self._cached_transcript_ok():
             self.log.info("Using cached transcript")
             tr = Transcript.load(self.transcript_path)
+            if not tr.extra.get("requested_language"):   # older transcript: record the language it's in
+                tr.extra["requested_language"] = self.settings.language or "auto"
+                tr.save(self.transcript_path)
         else:
             lang = self.settings.language
             self.log.info(f"Transcribing speech in {LANGUAGE_NAMES.get(lang, lang or 'auto-detected language')}…")

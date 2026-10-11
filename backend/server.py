@@ -269,9 +269,12 @@ def _transcript_language(proj: Path) -> str | None:
         data = json.loads((proj / "transcript.json").read_text())
     except (OSError, ValueError):
         return None
-    # Transcripts made before languages were chosen don't count: they are redone in the requested language
-    # (this is what fixes videos that were wrongly auto-detected, e.g. as Chinese).
-    return (data.get("extra") or {}).get("requested_language")
+    requested = (data.get("extra") or {}).get("requested_language")
+    if requested:
+        return requested
+    # Transcripts made before languages were chosen only count if they came out in English; anything else
+    # is redone in the requested language (this fixes videos wrongly auto-detected, e.g. as Chinese).
+    return "en" if data.get("language") == "en" else None
 
 
 def _public_output(video_id: str, o: dict) -> dict:
