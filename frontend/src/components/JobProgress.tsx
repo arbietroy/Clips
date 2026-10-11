@@ -38,8 +38,11 @@ export default function JobProgress({ job, uploading }: { job: Job | null; uploa
       <p className="muted small">
         {job?.status === "queued" && job.queue_position > 1
           ? `Waiting for ${job.queue_position - 1} other job(s) to finish…`
-          : job?.step || "Starting…"}
+          : job?.status === "queued" && job.waiting_for
+            ? "Waiting for the job before it to finish. The server does one job at a time."
+            : job?.step || "Starting…"}
       </p>
+      {job?.status === "queued" && job.waiting_for && <p className="muted small">Now: {job.waiting_for}</p>}
       {job?.error && <p className="error">{job.error}</p>}
       {job && job.log.length > 0 && (
         <details>

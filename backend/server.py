@@ -182,7 +182,9 @@ def _worker() -> None:
 
     while True:
         job_id = work_queue.get()
-        job = jobs[job_id]
+        job = jobs.get(job_id)
+        if job is None:
+            continue
         job["status"] = "running"
         job["started"] = time.time()
 
@@ -232,9 +234,10 @@ def _worker() -> None:
                 job["status"], job["error"] = "error", "No clips found. Try a shorter clip length or a longer video."
             if job["status"] == "error":
                 job["error"] = failed[0]["error"]
-        except Exception as e:  # report every failure to the UI
+        except BaseException as e:  # report every failure to the UI, and never let the worker die
             job["status"] = "error"
-            job["error"] = str(e)
+            job["error"] = str(e) or type(e).__name__
+            print(f"Job {job_id} failed: {job['error']}", flush=True)
         job["phase"] = None
         job["finished"] = time.time()
 
@@ -279,11 +282,31 @@ def _public_output(video_id: str, o: dict) -> dict:
     return o
 
 
+JOB_LABELS = {"analyze": "Finding clips in", "find_clips": "Exporting clips from",
+              "auto_edit": "Auto-editing", "manual": "Exporting a manual edit of"}
+
+
+def _running_summary() -> str | None:
+    """What the worker is busy with, so a waiting job can say what it's waiting for."""
+    for j in jobs.values():
+        if j["status"] == "running":
+            req: JobRequest = j["request"]
+            try:
+                name = json.loads((VIDEOS / req.video_id / "info.json").read_text()).get("name", "a video")
+            except Exception:
+                name = "a video"
+            started = int((time.time() - j.get("started", time.time())) / 60)
+            return f"{JOB_LABELS.get(req.type, 'Working on')} “{name}” ({j['step']}, running {started} min)"
+    return None
+
+
 def _public_job(job: dict) -> dict:
     req: JobRequest = job["request"]
+    queued = job["status"] == "queued"
     return {k: v for k, v in job.items() if k != "request"} | {
         "type": req.type, "video_id": req.video_id, "range": req.range, "options": req.options.model_dump(),
         "queue_position": list(work_queue.queue).index(job["id"]) + 1 if job["id"] in work_queue.queue else 0,
+        "waiting_for": _running_summary() if queued else None,
     }
 
 

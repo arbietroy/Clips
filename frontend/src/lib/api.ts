@@ -169,6 +169,7 @@ export interface Job {
   outputs: Output[];
   error: string | null;
   queue_position: number;
+  waiting_for?: string | null;
 }
 
 // ---------------------------------------------------------------- calls
