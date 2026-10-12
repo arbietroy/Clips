@@ -191,6 +191,8 @@ export const createJob = (body: {
   broll?: EditorBroll[];
   title?: string;
   hook_text?: string;
+  cut_ranges?: [number, number][];
+  keyframes?: Keyframe[];
   options: JobOptions;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
@@ -231,10 +233,30 @@ export interface EditorWord {
   text: string;
 }
 
+export interface StockClip {
+  provider: "pixabay" | "pexels" | "upload";
+  id: string;
+  url: string; // full-size file (rendered)
+  preview: string; // small file (played in the editor)
+  thumb: string | null;
+  tags: string;
+  duration: number;
+  width?: number;
+  height?: number;
+}
+
 export interface EditorBroll {
   start: number;
   end: number;
   label: string; // what to show (a topic like "voting", or any search words)
+  source?: StockClip | null; // the exact clip chosen; without one, footage is found from the label
+}
+
+export interface Keyframe {
+  time: number; // source seconds
+  scale: number; // 1 = no zoom
+  x: number; // -1 left … 1 right
+  y: number; // -1 top … 1 bottom
 }
 
 export interface EditorData extends ProjectSummary {
@@ -245,6 +267,9 @@ export interface EditorData extends ProjectSummary {
   auto_cut: number[];
   cut: number[] | null; // from a previous edit
   broll: EditorBroll[];
+  cut_ranges?: [number, number][];
+  keyframes?: Keyframe[];
+  stock?: boolean;
   settings: JobOptions;
   title?: string | null;
   language?: string | null;
@@ -259,3 +284,12 @@ export function getEditor(id: string, p: { start?: string | null; end?: string |
   if (p.source) q.set("source", p.source);
   return request<EditorData>(`/api/projects/${id}/editor?${q}`);
 }
+
+export const searchBroll = (q: string, orientation: string, strict = false) =>
+  request<{ results: StockClip[] }>(
+    `/api/broll/search?${new URLSearchParams({ q, orientation, strict: strict ? "true" : "false" })}`,
+  );
+export const getBrollUploads = () => request<{ results: StockClip[] }>("/api/broll/uploads");
+export const uploadBroll = (f: File, p: (n: number) => void) => upload<StockClip>("/api/broll/upload", f, p);
+/** Uploaded clips are served by our server; stock clips straight from the stock site. */
+export const clipUrl = (u: string) => (u.startsWith("/") ? apiUrl(u) : u);

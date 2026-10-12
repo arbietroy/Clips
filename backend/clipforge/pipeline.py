@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from .analyze import BROLL_VERSION, Analysis, ClipIdea, analyze, heuristic_broll
-from .assets import find_broll, find_music
+from .assets import fetch_stock, find_broll, find_music
 from .cleanup import find_removals, keep_segments
 from .config import Settings
 from .formats import resolve_size
@@ -324,34 +324,56 @@ class Project:
         return self.render_plans([self.plan_edit(max(0.0, start), min(end, dur), name, clip)])
 
     def manual_edit(self, start: float | None, end: float | None, cut_words: set[int], broll: list[dict],
-                    title: str | None = None, hook_text: str | None = None) -> list[dict]:
-        """Manual editor: render exactly the words the person kept, with the b-roll they placed."""
+                    title: str | None = None, hook_text: str | None = None,
+                    cut_ranges: list[list[float]] | None = None, keyframes: list[dict] | None = None) -> list[dict]:
+        """Manual editor: render exactly what the person kept (words they cut and pieces they sliced out),
+        with the b-roll they placed and their zoom/pan keyframes."""
         s = self.settings
         tr = self.transcript()
         a = self.analysis(reuse=True)
         start = 0.0 if start is None else max(0.0, start)
         end = tr.duration if end is None else min(end, tr.duration)
         full = start <= 0.5 and end >= tr.duration - 0.5
-        segs = keep_segments(tr.words, start, end, set(cut_words), [], s.max_pause, s.pause_padding)
+        ranges = [(float(a_), float(b_)) for a_, b_ in (cut_ranges or []) if b_ > a_]
+        segs = keep_segments(tr.words, start, end, set(cut_words), ranges, s.max_pause, s.pause_padding)
+        segs = subtract_ranges([list(x) for x in segs], ranges)
+        if not segs:
+            raise ValueError("Everything has been cut – restore something to export")
         name = f"manual_{int(start)}-{int(end)}_{self._size_tag()}_{s.caption_template}_{time.strftime('%H%M%S')}"
-        plan = self._base(name, "manual", [list(x) for x in segs])
+        plan = self._base(name, "manual", segs)
         plan.zoom_on_jump_cuts = s.zoom_on_jump_cuts and len(segs) <= 400
         plan.emphasis = [t for t in a.emphasis if start <= t <= end] if s.emphasis_zoom else []
+        plan.keyframes = sorted(keyframes or [], key=lambda k: k["time"])
         if s.broll:
             orientation = self._orientation(plan)
+            cache = self.dir.parent / "_broll_cache"
             for b in broll:
-                f = find_broll(b["label"], s.broll_dir, self.dir.parent / "_broll_cache", orientation,
-                               b["end"] - b["start"], self._used_broll, self.log,
-                               pexels_key=s.pexels_api_key, pixabay_key=s.pixabay_api_key)
+                f = None
+                src = b.get("source") or {}
+                try:
+                    if src.get("provider") == "upload":
+                        f = s.broll_dir / "uploads" / Path(src["id"]).name
+                        f = f if f.exists() else None
+                    elif src.get("url"):
+                        f = fetch_stock(src["url"], src.get("provider", "stock"), str(src.get("id", "")), cache)
+                except Exception as e:
+                    self.log.warn(f"B-roll '{b.get('label')}': couldn't get the chosen clip ({e})")
+                if f:
+                    self.log.info(f"B-roll '{b.get('label') or src.get('id')}': your chosen clip")
+                elif b.get("label"):
+                    f = find_broll(b["label"], s.broll_dir, cache, orientation, b["end"] - b["start"],
+                                   self._used_broll, self.log, pexels_key=s.pexels_api_key,
+                                   pixabay_key=s.pixabay_api_key)
                 if f:
                     self._used_broll.add(str(f))
-                    plan.broll.append({"start": b["start"], "end": b["end"], "query": b["label"],
+                    plan.broll.append({"start": b["start"], "end": b["end"], "query": b.get("label") or "b-roll",
                                        "file": str(Path(f).resolve())})
         mood = s.music_mood or a.music_mood
         plan.music = self._music(mood, name, s.music_volume * (0.6 if full else 1.0))
         plan.hook_text = hook_text if (hook_text and s.hook_title) else None
         plan.meta.update({"title": title or ("Manual edit" if full else "Manual edit of a clip"),
                           "source_range": [start, end], "cut_words": sorted(cut_words),
+                          "cut_ranges": [list(r) for r in ranges], "keyframes": plan.keyframes,
                           "broll_plan": broll, "manual": True})
         return self.render_plans([plan])
 
@@ -397,6 +419,22 @@ def list_outputs(project_dir: Path) -> list[dict]:
                     "duration": round(probe(video).duration, 2), "hook_text": plan.get("hook_text") or meta.get("hook_text"),
                     "cuts": len(plan.get("segments", [])) - 1, "created": video.stat().st_mtime, **meta})
     return sorted(out, key=lambda r: -r.get("created", 0))
+
+
+def subtract_ranges(segs: list[list[float]], cuts: list[tuple[float, float]], min_len: float = 0.15) -> list[list[float]]:
+    """Remove exact time ranges (pieces sliced out on the timeline) from kept segments."""
+    for a, b in sorted(cuts):
+        out = []
+        for s, e in segs:
+            if b <= s or a >= e:
+                out.append([s, e])
+                continue
+            if a - s >= min_len:
+                out.append([s, a])
+            if e - b >= min_len:
+                out.append([b, e])
+        segs = out
+    return segs
 
 
 def _split_for_transition(segs: list[list[float]], t: float, window: float = 4.0) -> int | None:

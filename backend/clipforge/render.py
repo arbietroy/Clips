@@ -41,6 +41,7 @@ class EditPlan:
     chapters: list[dict] = field(default_factory=list)      # {"time": src seconds, "title"}
     broll: list[dict] = field(default_factory=list)         # {"start", "end" (src), "query", "file"}
     emphasis: list[float] = field(default_factory=list)     # src seconds
+    keyframes: list[dict] = field(default_factory=list)     # {"time" (src), "scale" >= 1, "x", "y" in -1..1}
     music: dict | None = None                   # {"file", "volume", "mood"}
     captions: bool = True
     caption_template: str = "bold-pop"
@@ -172,6 +173,35 @@ def _zoom_expr(shots, transition_times, emphasis, jump_zoom: bool) -> str | None
     return "1+" + "+".join(terms) if terms else None
 
 
+def _ease(points: list[tuple[float, float]]) -> str:
+    """FFmpeg expression of t that eases between keyframe values (holding the first and last)."""
+    if len(points) == 1 or all(abs(v - points[0][1]) < 1e-4 for _, v in points):
+        return f"{points[0][1]:.4f}"
+    expr = f"{points[-1][1]:.4f}"
+    for (t0, v0), (t1, v1) in reversed(list(zip(points, points[1:]))):
+        if t1 - t0 < 1e-3:
+            continue
+        f = f"((t-{t0:.3f})/{t1 - t0:.3f})"
+        expr = f"if(lt(t,{t1:.3f}),{v0:.4f}+({v1 - v0:.4f})*{f}*{f}*(3-2*{f}),{expr})"
+    return f"if(lt(t,{points[0][0]:.3f}),{points[0][1]:.4f},{expr})"
+
+
+def _keyframe_exprs(keyframes: list[dict], tl: Timeline) -> tuple[str, str, str] | None:
+    pts = []
+    for k in keyframes[:150]:
+        o = tl.to_out(float(k["time"]), clamp=True)
+        if o is not None:
+            pts.append((o, max(1.0, min(float(k.get("scale", 1)), 4.0)),
+                        max(-1.0, min(float(k.get("x", 0)), 1.0)), max(-1.0, min(float(k.get("y", 0)), 1.0))))
+    if not pts:
+        return None
+    pts.sort()
+    if all(abs(p[1] - 1) < 1e-4 for p in pts):
+        return None                       # never zoomed in: nothing to move
+    return (_ease([(p[0], p[1]) for p in pts]), _ease([(p[0], p[2]) for p in pts]),
+            _ease([(p[0], p[3]) for p in pts]))
+
+
 def _make_whoosh(path: Path, log) -> None:
     if path.exists():
         return
@@ -239,7 +269,15 @@ def render(plan: EditPlan, transcript: Transcript, out_dir: Path, work: Path, lo
 
     # --- zoom animations (jump-cut punch-ins + emphasis) ---
     z = _zoom_expr(shots, transition_times, emphasis, plan.zoom_on_jump_cuts)
-    if z:
+    kf = _keyframe_exprs(plan.keyframes, tl)
+    if kf:
+        # Keyframes (manual editor): zoom and pan, multiplied with any automatic punch-ins.
+        ks, kx, ky = kf
+        total = f"({ks})*({z})" if z else ks
+        chains.append(f"[framed]scale=w='2*trunc({W}*({total})/2)':h='2*trunc({H}*({total})/2)':eval=frame,"
+                      f"crop=w={W}:h={H}:x='(in_w-{W})/2*(1+({kx}))':y='(in_h-{H})/2*(1+({ky}))',setsar=1[zoomed]")
+        cur = "[zoomed]"
+    elif z:
         chains.append(f"[framed]scale=w='2*trunc({W}*({z})/2)':h='2*trunc({H}*({z})/2)':eval=frame,"
                       f"crop={W}:{H},setsar=1[zoomed]")
         cur = "[zoomed]"

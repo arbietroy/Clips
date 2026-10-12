@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from clipforge.analyze import Analysis, ClipIdea, heuristic_broll
 from clipforge.cleanup import find_removals
-from clipforge.assets import AUDIO_EXT, VIDEO_EXT
+from clipforge.assets import AUDIO_EXT, VIDEO_EXT, search_stock
 from clipforge.config import MOODS, Settings
 from clipforge.formats import FORMATS
 from clipforge.log import Log
@@ -129,7 +129,15 @@ class ClipIn(BaseModel):
 class BrollIn(BaseModel):
     start: float
     end: float
-    label: str
+    label: str = ""
+    source: dict | None = None            # a clip picked in the editor: {provider, id, url, preview, thumb}
+
+
+class KeyframeIn(BaseModel):
+    time: float                           # source seconds
+    scale: float = 1.0
+    x: float = 0.0                        # -1 (left) .. 1 (right)
+    y: float = 0.0                        # -1 (top) .. 1 (bottom)
 
 
 class JobRequest(BaseModel):
@@ -142,6 +150,8 @@ class JobRequest(BaseModel):
     broll: list[BrollIn] | None = None    # manual only: b-roll placed in the editor (source times)
     title: str | None = None              # manual only
     hook_text: str | None = None          # manual only
+    cut_ranges: list[list[float]] | None = None   # manual only: pieces sliced out on the timeline (source times)
+    keyframes: list[KeyframeIn] | None = None     # manual only: zoom/pan keyframes
     options: JobOptions = JobOptions()
 
 
@@ -221,7 +231,9 @@ def _worker() -> None:
             elif req.type == "manual":
                 rng = req.range if req.range and len(req.range) == 2 else [None, None]
                 outputs = project.manual_edit(rng[0], rng[1], set(req.cut_words or []),
-                                              [b.model_dump() for b in req.broll or []], req.title, req.hook_text)
+                                              [b.model_dump() for b in req.broll or []], req.title, req.hook_text,
+                                              cut_ranges=req.cut_ranges,
+                                              keyframes=[k.model_dump() for k in req.keyframes or []])
             else:
                 rng = req.range if req.range and len(req.range) == 2 else [None, None]
                 outputs = project.auto_edit(*rng)
@@ -522,6 +534,8 @@ def editor_data(video_id: str, start: float | None = None, end: float | None = N
     cut: set[int] | None = None
     broll: list[dict] | None = None
     title = None
+    cut_ranges: list = []
+    keyframes: list = []
     if source:
         plan_file = proj / f"{Path(source).name}.plan.json"
         if plan_file.exists():
@@ -542,6 +556,8 @@ def editor_data(video_id: str, start: float | None = None, end: float | None = N
                 segs = plan.get("segments") or []
                 cut = {i for i, w in enumerate(tr.words)
                        if not any(a - 0.05 <= (w.start + w.end) / 2 <= b + 0.05 for a, b in segs)}
+            cut_ranges = meta.get("cut_ranges") or []
+            keyframes = meta.get("keyframes") or []
             broll = meta.get("broll_plan") or [{"start": b["start"], "end": b["end"], "label": b["query"]}
                                                for b in plan.get("broll", [])]
     start = 0.0 if start is None else max(0.0, start)
@@ -570,6 +586,9 @@ def editor_data(video_id: str, start: float | None = None, end: float | None = N
         "auto_cut": sorted(i for i in auto if i in set(idx)),
         "cut": sorted(cut & set(idx)) if cut is not None else None,
         "broll": broll,
+        "cut_ranges": cut_ranges,
+        "keyframes": keyframes,
+        "stock": bool(os.environ.get("PEXELS_API_KEY") or os.environ.get("PIXABAY_API_KEY")),
         "settings": settings,
         "title": title,
         "language": _transcript_language(proj),
@@ -633,6 +652,61 @@ def get_job(job_id: str) -> dict:
     if not job:
         raise HTTPException(404, "Unknown job (the server may have restarted)")
     return _public_job(job)
+
+
+# ---------------------------------------------------------------------------
+# B-roll library for the manual editor
+# ---------------------------------------------------------------------------
+
+BROLL_UPLOADS = HERE / "broll" / "uploads"
+
+
+@app.get("/api/broll/search", dependencies=[Depends(check_access)])
+def broll_search(q: str, orientation: str = "landscape", strict: bool = False) -> dict:
+    q = q.strip()[:80]
+    pexels, pixabay = os.environ.get("PEXELS_API_KEY"), os.environ.get("PIXABAY_API_KEY")
+    if not (pexels or pixabay):
+        raise HTTPException(400, "Add PIXABAY_API_KEY to backend\\.env to search stock footage")
+    if not q:
+        return {"results": []}
+    try:
+        results = search_stock(q, "portrait" if orientation == "portrait" else "landscape", pexels, pixabay,
+                               strict=strict, limit=8 if strict else 24)
+    except Exception as e:
+        raise HTTPException(502, f"Stock footage search failed: {e}")
+    return {"results": results}
+
+
+@app.get("/api/broll/uploads", dependencies=[Depends(check_access)])
+def broll_uploads() -> dict:
+    files = sorted(BROLL_UPLOADS.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True) if BROLL_UPLOADS.exists() else []
+    return {"results": [_upload_info(p) for p in files if p.suffix.lower() in VIDEO_EXT]}
+
+
+def _upload_info(p: Path) -> dict:
+    return {"provider": "upload", "id": p.name, "url": f"/api/broll/files/{p.name}",
+            "preview": f"/api/broll/files/{p.name}", "thumb": None, "tags": p.stem.split("_", 1)[-1],
+            "duration": 0}
+
+
+@app.post("/api/broll/upload", dependencies=[Depends(check_access)])
+async def broll_upload(file: UploadFile = File(...)) -> dict:
+    name = Path(file.filename or "clip.mp4")
+    if name.suffix.lower() not in VIDEO_EXT:
+        raise HTTPException(400, f"Unsupported video type {name.suffix}")
+    BROLL_UPLOADS.mkdir(parents=True, exist_ok=True)
+    stem = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name.stem)[:60] or "clip"
+    dest = BROLL_UPLOADS / f"{uuid.uuid4().hex[:6]}_{stem}{name.suffix.lower()}"
+    await _save_upload(file, dest)
+    return _upload_info(dest)
+
+
+@app.get("/api/broll/files/{filename}")
+def broll_file(filename: str) -> FileResponse:
+    path = (BROLL_UPLOADS / Path(filename).name).resolve()
+    if path.parent != BROLL_UPLOADS.resolve() or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 @app.get("/media/{video_id}/{filename}")
